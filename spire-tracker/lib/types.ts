@@ -58,9 +58,17 @@ export interface Deal {
   escalation: boolean;
   escalationReason: string;
   escalatedAt: string | null; // ISO datetime (not date-only) — needed for business-hours math
+  escalationNotifiedAt?: string | null; // when the "flagged" email was sent to ops (prevents duplicate alerts)
   opsResponse: string; // ops manager's response to the current, unresolved escalation
   escalationHistory: EscalationRecord[]; // past escalations on this deal, resolved
   createdAt: string;
+}
+
+// Maps a broker's name (the app's only identifier, since login is a shared
+// team password) to the email address that should receive their notifications.
+export interface BrokerContact {
+  name: string;
+  email: string;
 }
 
 export interface CapacityCheckin {
@@ -79,6 +87,8 @@ export interface TrackerDB {
   logs: ContactLog[];
   deals: Deal[];
   capacity: CapacityCheckin[];
+  brokerContacts: BrokerContact[]; // name -> email, for notifications
+  opsRecipients: string[]; // email addresses that get escalation alerts
 }
 
 export type Role = "broker" | "ops" | null;

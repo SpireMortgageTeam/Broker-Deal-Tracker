@@ -3,6 +3,7 @@ import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource } from "@/lib/types";
 import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo } from "@/lib/utils";
+import { notifyEscalation } from "@/lib/api";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import type { Mutate } from "@/app/page";
@@ -262,11 +263,35 @@ function DealRow({
   }
   async function toggleEsc(checked: boolean) {
     await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
-      ? { ...d, escalation: checked, escalatedAt: checked ? (d.escalatedAt || nowISO()) : null, opsResponse: checked && !d.escalatedAt ? "" : d.opsResponse }
+      ? {
+          ...d,
+          escalation: checked,
+          escalatedAt: checked ? (d.escalatedAt || nowISO()) : null,
+          // Clearing the flag resets the "notified" marker so re-flagging later
+          // will alert ops again.
+          escalationNotifiedAt: checked ? d.escalationNotifiedAt : null,
+          opsResponse: checked && !d.escalatedAt ? "" : d.opsResponse,
+        }
       : d));
   }
+  // Saving the reason on a flagged deal automatically alerts ops — but only the
+  // first time (escalationNotifiedAt guards against re-emailing on later edits).
   async function saveReason() {
-    await mutate("deals", (arr) => arr.map((d) => d.id === deal.id ? { ...d, escalationReason: reasonDraft } : d));
+    const reason = reasonDraft;
+    const shouldNotify = deal.escalation && !deal.escalationNotifiedAt && Boolean(reason.trim());
+    await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
+      ? { ...d, escalationReason: reason, escalationNotifiedAt: shouldNotify ? nowISO() : d.escalationNotifiedAt }
+      : d));
+    if (shouldNotify) {
+      notifyEscalation({
+        broker,
+        clientName: clientName(deal.clientId),
+        stage: deal.stage,
+        value: Number(deal.value || 0),
+        reason,
+      });
+      showToast("Ops notified");
+    }
   }
   async function remove() {
     await mutate("deals", (arr) => arr.filter((d) => d.id !== deal.id));
@@ -319,7 +344,9 @@ function DealRow({
                 <b style={{ color: "var(--charcoal)" }}>Ops response:</b> {deal.opsResponse}
               </div>
             ) : (
-              <div className="muted" style={{ marginTop: 6 }}>Waiting on a response from your ops manager.</div>
+              <div className="muted" style={{ marginTop: 6 }}>
+                {deal.escalationNotifiedAt ? "Ops has been notified — waiting on a response." : "Add a reason and your ops manager is alerted automatically."}
+              </div>
             )}
           </td>
         </tr>

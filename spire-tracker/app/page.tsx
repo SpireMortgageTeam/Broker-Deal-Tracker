@@ -13,7 +13,7 @@ export type Mutate = <K extends keyof TrackerDB>(
   updater: (current: TrackerDB[K]) => TrackerDB[K]
 ) => Promise<void>;
 
-const EMPTY_DB: TrackerDB = { brokers: [], clients: [], logs: [], deals: [], capacity: [] };
+const EMPTY_DB: TrackerDB = { brokers: [], clients: [], logs: [], deals: [], capacity: [], brokerContacts: [], opsRecipients: [] };
 
 export default function Page() {
   const [db, setDb] = useState<TrackerDB>(EMPTY_DB);
@@ -23,14 +23,16 @@ export default function Page() {
 
   useEffect(() => {
     (async () => {
-      const [brokers, clients, logs, deals, capacity] = await Promise.all([
+      const [brokers, clients, logs, deals, capacity, brokerContacts, opsRecipients] = await Promise.all([
         loadArr<string>(KV_KEYS.brokers),
         loadArr(KV_KEYS.clients),
         loadArr(KV_KEYS.logs),
         loadArr(KV_KEYS.deals),
         loadArr(KV_KEYS.capacity),
+        loadArr(KV_KEYS.brokerContacts),
+        loadArr<string>(KV_KEYS.opsRecipients),
       ]);
-      setDb({ brokers, clients, logs, deals, capacity } as TrackerDB);
+      setDb({ brokers, clients, logs, deals, capacity, brokerContacts, opsRecipients } as TrackerDB);
       setLoading(false);
     })();
   }, []);
