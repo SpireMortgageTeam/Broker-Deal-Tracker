@@ -55,8 +55,8 @@ export default function BrokerView({
       </div>
 
       <div className="tabs">
-        <div className={`tab ${tab === "log" ? "active" : ""}`} onClick={() => setTab("log")}>Log Activity</div>
-        <div className={`tab ${tab === "deals" ? "active" : ""}`} onClick={() => setTab("deals")}>My Deals</div>
+        <div className={`tab ${tab === "log" ? "active" : ""}`} onClick={() => setTab("log")}>Outreach</div>
+        <div className={`tab ${tab === "deals" ? "active" : ""}`} onClick={() => setTab("deals")}>Active Deals</div>
         <div className={`tab ${tab === "capacity" ? "active" : ""}`} onClick={() => setTab("capacity")}>Weekly Capacity</div>
       </div>
 
@@ -78,7 +78,7 @@ export default function BrokerView({
               <table>
                 <thead>
                   <tr>
-                    <th>Client / Lender</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Escalate</th><th></th>
+                    <th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Escalate</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -233,7 +233,7 @@ function DealRow({
   return (
     <>
       <tr>
-        <td><b>{clientName(deal.clientId)}</b><div className="muted">{deal.lender || "—"}</div></td>
+        <td><b>{clientName(deal.clientId)}</b></td>
         <td>
           <select className="inline-select" value={deal.stage} onChange={(e) => updateStage(e.target.value)}>
             {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -277,7 +277,6 @@ function NewDealModal({
 }: { broker: string; myClients: TrackerDB["clients"]; mutate: Mutate; onClose: () => void }) {
   const [clientSel, setClientSel] = useState("__new__");
   const [newClientName, setNewClientName] = useState("");
-  const [lender, setLender] = useState("");
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(ACTIVE_STAGES[0]);
 
@@ -291,7 +290,7 @@ function NewDealModal({
       clientId = nc.id;
     }
     const deal = {
-      id: uid(), clientId, broker, lender: lender.trim(), value: Number(value) || 0,
+      id: uid(), clientId, broker, value: Number(value) || 0,
       stage, stageEnteredDate: todayISO(), docStatus: "None" as const,
       escalation: false, escalationReason: "", escalatedAt: null, createdAt: todayISO(),
     };
@@ -317,10 +316,6 @@ function NewDealModal({
             <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} />
           </div>
         )}
-        <div className="field">
-          <label>Lender / product</label>
-          <input type="text" value={lender} onChange={(e) => setLender(e.target.value)} placeholder="e.g. Alt-A first mortgage — Lender X" />
-        </div>
         <div className="field">
           <label>Estimated deal value ($)</label>
           <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />

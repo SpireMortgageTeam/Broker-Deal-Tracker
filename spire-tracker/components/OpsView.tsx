@@ -122,7 +122,7 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
       </div>
       {open.length ? (
         <table>
-          <thead><tr><th>Broker</th><th>Client / Lender</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Status</th></tr></thead>
+          <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Status</th></tr></thead>
           <tbody>
             {open.map((d) => {
               const days = daysBetween(d.stageEnteredDate, todayISO());
@@ -130,7 +130,7 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
               return (
                 <tr key={d.id}>
                   <td>{d.broker}</td>
-                  <td><b>{clientName(d.clientId)}</b><div className="muted">{d.lender || "—"}</div></td>
+                  <td><b>{clientName(d.clientId)}</b></td>
                   <td><span className="pill">{d.stage}</span></td>
                   <td><span className={`pill ${cls}`}>{days}d</span></td>
                   <td>{d.docStatus}</td>

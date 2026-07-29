@@ -1,29 +1,23 @@
 import { Stage, ContactType, Outcome, DocStatus } from "./types";
 
 export const STAGES: Stage[] = [
-  "Lead",
-  "Pre-Approval",
-  "Docs Collection",
+  "Doc Collection",
+  "Pre-App",
+  "Submitted",
   "Conditions",
-  "Underwriting",
-  "Funding",
-  "Closed - Won",
-  "Dead - Lost",
+  "Broker Complete",
 ];
 
-export const ACTIVE_STAGES: Stage[] = STAGES.filter(
-  (s) => !s.startsWith("Closed") && !s.startsWith("Dead")
-);
+// "Broker Complete" is the terminal stage — once a deal reaches it, the
+// broker's work is done, so it drops out of open pipeline counts.
+export const ACTIVE_STAGES: Stage[] = STAGES.filter((s) => s !== "Broker Complete");
 
 export const STAGE_COLORS: Record<Stage, string> = {
-  "Lead": "#BFCACA",
-  "Pre-Approval": "#9FB3AE",
-  "Docs Collection": "#C39D75",
+  "Doc Collection": "#C39D75",
+  "Pre-App": "#9FB3AE",
+  "Submitted": "#697B81",
   "Conditions": "#B58A5E",
-  "Underwriting": "#697B81",
-  "Funding": "#4F6E76",
-  "Closed - Won": "#5B7B63",
-  "Dead - Lost": "#B5533C",
+  "Broker Complete": "#5B7B63",
 };
 
 export const CONTACT_TYPES: ContactType[] = [

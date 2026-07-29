@@ -1,12 +1,9 @@
 export type Stage =
-  | "Lead"
-  | "Pre-Approval"
-  | "Docs Collection"
+  | "Doc Collection"
+  | "Pre-App"
+  | "Submitted"
   | "Conditions"
-  | "Underwriting"
-  | "Funding"
-  | "Closed - Won"
-  | "Dead - Lost";
+  | "Broker Complete";
 
 export type ContactType = "Initial Call" | "Follow-Up Call" | "Email" | "Appointment";
 export type Outcome =
@@ -40,7 +37,6 @@ export interface Deal {
   id: string;
   clientId: string;
   broker: string;
-  lender: string;
   value: number;
   stage: Stage;
   stageEnteredDate: string; // ISO date, updated whenever stage changes
