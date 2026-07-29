@@ -78,7 +78,7 @@ export default function BrokerView({
               <table>
                 <thead>
                   <tr>
-                    <th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Escalate</th><th></th>
+                    <th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Time Logged</th><th>Escalate</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -114,10 +114,13 @@ function LogTab({
 }) {
   const [clientSel, setClientSel] = useState("__new__");
   const [newClientName, setNewClientName] = useState("");
+  const [dealSel, setDealSel] = useState("__none__");
   const [type, setType] = useState(CONTACT_TYPES[0]);
   const [outcome, setOutcome] = useState(OUTCOMES[0]);
   const [notes, setNotes] = useState("");
   const [timeSpent, setTimeSpent] = useState(TIME_SPENT_OPTIONS[0].minutes);
+
+  const clientDeals = db.deals.filter((d) => d.clientId === clientSel && d.broker === broker);
 
   const todays = db.logs
     .filter((l) => l.broker === broker && l.date === todayISO())
@@ -133,8 +136,9 @@ function LogTab({
       await mutate("clients", (arr) => [...arr, newClient]);
       clientId = newClient.id;
     }
-    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent }]);
-    setNewClientName(""); setNotes("");
+    const dealId = dealSel === "__none__" ? null : dealSel;
+    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent, dealId }]);
+    setNewClientName(""); setNotes(""); setDealSel("__none__");
     showToast("Logged");
   }
 
@@ -149,7 +153,7 @@ function LogTab({
         <div className="grid grid-2">
           <div className="field">
             <label>Client</label>
-            <select value={clientSel} onChange={(e) => setClientSel(e.target.value)}>
+            <select value={clientSel} onChange={(e) => { setClientSel(e.target.value); setDealSel("__none__"); }}>
               <option value="__new__">+ New client…</option>
               {myClients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -158,6 +162,15 @@ function LogTab({
             <div className="field">
               <label>New client name</label>
               <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Full name" />
+            </div>
+          )}
+          {clientSel !== "__new__" && clientDeals.length > 0 && (
+            <div className="field">
+              <label>Which deal is this time for?</label>
+              <select value={dealSel} onChange={(e) => setDealSel(e.target.value)}>
+                <option value="__none__">Not deal-specific</option>
+                {clientDeals.map((d) => <option key={d.id} value={d.id}>{d.stage}{d.escalation ? " (flagged)" : ""}</option>)}
+              </select>
             </div>
           )}
         </div>
@@ -220,6 +233,7 @@ function DealRow({
   const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
   const recentResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0] || null;
+  const dealMinutes = db.logs.filter((l) => l.dealId === deal.id).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
 
   async function updateStage(stage: string) {
     if (stage === deal.stage) return;
@@ -257,6 +271,7 @@ function DealRow({
           </select>
         </td>
         <td>${Number(deal.value || 0).toLocaleString()}</td>
+        <td className="muted">{(dealMinutes / 60).toFixed(1)} hrs</td>
         <td>
           <label className="checkrow">
             <input type="checkbox" checked={deal.escalation} onChange={(e) => toggleEsc(e.target.checked)} />
@@ -267,7 +282,7 @@ function DealRow({
       </tr>
       {deal.escalation && (
         <tr>
-          <td colSpan={7} style={{ borderBottom: "1px solid var(--warmgrey)", background: "#fbf3ee" }}>
+          <td colSpan={8} style={{ borderBottom: "1px solid var(--warmgrey)", background: "#fbf3ee" }}>
             <input
               type="text"
               placeholder="Escalation reason / what's needed"
@@ -288,7 +303,7 @@ function DealRow({
       )}
       {!deal.escalation && recentResolution && (
         <tr>
-          <td colSpan={7} style={{ borderBottom: "1px solid var(--warmgrey)", background: "#eef4ef" }}>
+          <td colSpan={8} style={{ borderBottom: "1px solid var(--warmgrey)", background: "#eef4ef" }}>
             <span className="pill ok">Resolved {daysAgo(recentResolution.resolvedAt)}d ago</span>
             {recentResolution.opsResponse ? <span style={{ marginLeft: 8 }}>{recentResolution.opsResponse}</span> : null}
           </td>

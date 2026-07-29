@@ -32,6 +32,7 @@ export interface ContactLog {
   outcome: Outcome;
   notes: string;
   timeSpentMinutes: number;
+  dealId: string | null; // which deal this time/touch applies to, if any
 }
 
 export interface EscalationRecord {

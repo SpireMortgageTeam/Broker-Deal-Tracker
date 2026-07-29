@@ -156,11 +156,12 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
       </div>
       {open.length ? (
         <table>
-          <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Status</th></tr></thead>
+          <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Time Logged</th><th>Status</th></tr></thead>
           <tbody>
             {open.map((d) => {
               const days = daysBetween(d.stageEnteredDate, todayISO());
               const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
+              const dealMinutes = db.logs.filter((l) => l.dealId === d.id).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
               return (
                 <tr key={d.id}>
                   <td>{d.broker}</td>
@@ -169,6 +170,7 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
                   <td><span className={`pill ${cls}`}>{days}d</span></td>
                   <td>{d.docStatus}</td>
                   <td>${Number(d.value || 0).toLocaleString()}</td>
+                  <td className="muted">{(dealMinutes / 60).toFixed(1)} hrs</td>
                   <td>{d.escalation ? <span className="pill bad">Flagged</span> : "—"}</td>
                 </tr>
               );
