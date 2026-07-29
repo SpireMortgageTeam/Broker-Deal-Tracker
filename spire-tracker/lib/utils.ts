@@ -108,3 +108,7 @@ export function fmtDateTime(iso: string): string {
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
+
+export function totalMinutesForDeal(logs: { dealId: string | null; timeSpentMinutes: number }[], dealId: string): number {
+  return logs.filter((l) => l.dealId === dealId).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
+}

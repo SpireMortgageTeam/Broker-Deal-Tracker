@@ -2,10 +2,12 @@
 import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource } from "@/lib/types";
 import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES } from "@/lib/constants";
-import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo } from "@/lib/utils";
+import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo, totalMinutesForDeal } from "@/lib/utils";
 import { notifyEscalation } from "@/lib/api";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
+import TimeEntriesModal from "./TimeEntriesModal";
+import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
 type Tab = "log" | "deals" | "capacity";
@@ -21,6 +23,9 @@ export default function BrokerView({
 }) {
   const [tab, setTab] = useState<Tab>("log");
   const [showNewDeal, setShowNewDeal] = useState(false);
+  const [dealsSortKey, setDealsSortKey] = useState<string | null>(null);
+  const [dealsSortDir, setDealsSortDir] = useState<SortDir>("asc");
+  const handleDealsSort = makeSortHandler(dealsSortKey, setDealsSortKey, dealsSortDir, setDealsSortDir);
 
   const myClients = db.clients.filter((c) => c.broker === broker);
   const myDeals = db.deals.filter((d) => d.broker === broker);
@@ -33,6 +38,17 @@ export default function BrokerView({
   function clientName(id: string) {
     return db.clients.find((c) => c.id === id)?.name ?? "(unknown client)";
   }
+
+  const myOpenDealsSorted = sortRows(myOpenDeals, dealsSortKey, dealsSortDir, (d, key) => {
+    if (key === "client") return clientName(d.clientId);
+    if (key === "stage") return d.stage;
+    if (key === "aging") return daysBetween(d.stageEnteredDate, todayISO());
+    if (key === "docs") return d.docStatus;
+    if (key === "value") return d.value || 0;
+    if (key === "time") return totalMinutesForDeal(db.logs, d.id);
+    if (key === "escalate") return d.escalation ? 1 : 0;
+    return "";
+  });
 
   return (
     <>
@@ -76,18 +92,27 @@ export default function BrokerView({
               <button className="btn small" onClick={() => setShowNewDeal(true)}>+ Add deal</button>
             </div>
             {myOpenDeals.length ? (
+              <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Time Logged</th><th>Escalate</th><th></th>
+                    <SortableTh label="Client" sortKey="client" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Stage" sortKey="stage" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Aging" sortKey="aging" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Docs" sortKey="docs" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Value" sortKey="value" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Time Logged" sortKey="time" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Escalate" sortKey="escalate" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {myOpenDeals.map((d) => (
+                  {myOpenDealsSorted.map((d) => (
                     <DealRow key={d.id} deal={d} db={db} mutate={mutate} clientName={clientName} broker={broker} />
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <div className="empty">No open deals yet. Add your first one above.</div>
             )}
@@ -128,6 +153,16 @@ function LogTab({
     .filter((l) => l.broker === broker && l.date === todayISO())
     .slice()
     .reverse();
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const handleSort = makeSortHandler(sortKey, setSortKey, sortDir, setSortDir);
+  const todaysSorted = sortRows(todays, sortKey, sortDir, (l, key) => {
+    if (key === "client") return clientName(l.clientId);
+    if (key === "type") return l.type;
+    if (key === "outcome") return l.outcome;
+    if (key === "time") return l.timeSpentMinutes;
+    return "";
+  });
 
   async function save() {
     let clientId = clientSel;
@@ -214,10 +249,17 @@ function LogTab({
       <div className="card">
         <div className="section-title"><h3>Today&apos;s activity</h3><span className="muted">{todays.length} logged</span></div>
         {todays.length ? (
+          <div className="table-wrap">
           <table>
-            <thead><tr><th>Client</th><th>Type</th><th>Outcome</th><th>Time</th><th>Notes</th><th></th></tr></thead>
+            <thead><tr>
+              <SortableTh label="Client" sortKey="client" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Type" sortKey="type" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Outcome" sortKey="outcome" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Time" sortKey="time" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <th>Notes</th><th></th>
+            </tr></thead>
             <tbody>
-              {todays.map((l) => (
+              {todaysSorted.map((l) => (
                 <tr key={l.id}>
                   <td>{clientName(l.clientId)}</td>
                   <td><span className="pill">{l.type}</span></td>
@@ -229,6 +271,7 @@ function LogTab({
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <div className="empty">Nothing logged yet today. First entry above takes 10 seconds.</div>
         )}
@@ -244,6 +287,7 @@ function DealRow({
   const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
   const [showLogTime, setShowLogTime] = useState(false);
+  const [showEntries, setShowEntries] = useState(false);
   const recentResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0] || null;
   const dealLogs = db.logs.filter((l) => l.dealId === deal.id);
   const dealMinutes = dealLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
@@ -319,6 +363,9 @@ function DealRow({
             <div key={stage} style={{ fontSize: 11 }}>{stage}: {(mins / 60).toFixed(1)}h</div>
           ))}
           <button className="x-link" style={{ color: "var(--charcoal)", paddingLeft: 0 }} onClick={() => setShowLogTime(true)}>+ Log time</button>
+          {dealLogs.length > 0 && (
+            <button className="x-link" style={{ color: "var(--greyblue)", paddingLeft: 0 }} onClick={() => setShowEntries(true)}>View entries</button>
+          )}
         </td>
         <td>
           <label className="checkrow">
@@ -362,6 +409,9 @@ function DealRow({
       {showLogTime && (
         <LogTimeModal deal={deal} broker={broker} mutate={mutate} onClose={() => setShowLogTime(false)} />
       )}
+      {showEntries && (
+        <TimeEntriesModal dealLabel={`${clientName(deal.clientId)} — ${deal.stage}`} logs={dealLogs} mutate={mutate} allowEdit={false} onClose={() => setShowEntries(false)} />
+      )}
     </>
   );
 }
@@ -372,6 +422,8 @@ function LogTimeModal({
   const [type, setType] = useState(CONTACT_TYPES[0]);
   const [timeSpent, setTimeSpent] = useState(TIME_SPENT_OPTIONS[0].minutes);
   const [notes, setNotes] = useState("");
+  const [escalate, setEscalate] = useState(false);
+  const [escalateReason, setEscalateReason] = useState("");
 
   async function save() {
     await mutate("logs", (arr) => [...arr, {
@@ -379,7 +431,12 @@ function LogTimeModal({
       type, outcome: "Other", notes: notes.trim(), timeSpentMinutes: timeSpent,
       dealId: deal.id, stageAtLog: deal.stage,
     }]);
-    showToast("Time logged");
+    if (escalate && !deal.escalation) {
+      await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
+        ? { ...d, escalation: true, escalatedAt: nowISO(), escalationReason: escalateReason.trim() || notes.trim(), opsResponse: "" }
+        : d));
+    }
+    showToast(escalate ? "Time logged and deal flagged" : "Time logged");
     onClose();
   }
 
@@ -403,6 +460,23 @@ function LogTimeModal({
           <label>Notes (optional)</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What did this time cover?" />
         </div>
+        {!deal.escalation && (
+          <div className="field">
+            <label className="checkrow" style={{ textTransform: "none", fontWeight: 600, color: "var(--charcoal)" }}>
+              <input type="checkbox" checked={escalate} onChange={(e) => setEscalate(e.target.checked)} />
+              This work turned up a problem — flag this deal for ops
+            </label>
+            {escalate && (
+              <input
+                type="text"
+                placeholder="What does ops need to know? (defaults to your notes above if left blank)"
+                value={escalateReason}
+                onChange={(e) => setEscalateReason(e.target.value)}
+                style={{ marginTop: 8, border: "1px solid var(--danger)" }}
+              />
+            )}
+          </div>
+        )}
         <div className="flexend">
           <button className="btn secondary" onClick={onClose}>Cancel</button>
           <button className="btn" onClick={save}>Log time</button>

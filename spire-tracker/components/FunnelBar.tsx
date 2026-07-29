@@ -12,16 +12,16 @@ export default function FunnelBar({ deals }: { deals: Deal[] }) {
 
   if (!anyOpen) {
     return (
-      <div className="funnel">
+      <div className="funnel-wrap"><div className="funnel">
         <div className="funnel-seg" style={{ width: "100%", background: "var(--warmgrey)", color: "var(--greyblue)" }}>
           No open deals
         </div>
-      </div>
+      </div></div>
     );
   }
 
   return (
-    <div className="funnel">
+    <div className="funnel-wrap"><div className="funnel">
       {counts
         .filter((c) => c.n > 0)
         .map((c) => (
@@ -35,6 +35,6 @@ export default function FunnelBar({ deals }: { deals: Deal[] }) {
             <div>{c.stage}</div>
           </div>
         ))}
-    </div>
+    </div></div>
   );
 }
