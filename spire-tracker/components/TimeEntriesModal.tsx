@@ -43,6 +43,7 @@ export default function TimeEntriesModal({
           {allowEdit ? "You can correct a mistaken entry's time or remove it entirely." : "Remove an entry if it was logged by mistake."}
         </p>
         {sorted.length ? (
+          <div className="table-wrap">
           <table>
             <thead><tr>
               <SortableTh label="Date" sortKey="date" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
@@ -57,6 +58,7 @@ export default function TimeEntriesModal({
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <div className="empty">No time entries logged against this deal yet.</div>
         )}

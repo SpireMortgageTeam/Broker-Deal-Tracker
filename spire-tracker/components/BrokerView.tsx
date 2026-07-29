@@ -91,6 +91,7 @@ export default function BrokerView({
               <button className="btn small" onClick={() => setShowNewDeal(true)}>+ Add deal</button>
             </div>
             {myOpenDeals.length ? (
+              <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
@@ -110,6 +111,7 @@ export default function BrokerView({
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <div className="empty">No open deals yet. Add your first one above.</div>
             )}
@@ -246,6 +248,7 @@ function LogTab({
       <div className="card">
         <div className="section-title"><h3>Today&apos;s activity</h3><span className="muted">{todays.length} logged</span></div>
         {todays.length ? (
+          <div className="table-wrap">
           <table>
             <thead><tr>
               <SortableTh label="Client" sortKey="client" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
@@ -267,6 +270,7 @@ function LogTab({
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <div className="empty">Nothing logged yet today. First entry above takes 10 seconds.</div>
         )}

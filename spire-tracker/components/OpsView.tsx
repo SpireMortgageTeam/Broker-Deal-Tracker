@@ -170,6 +170,7 @@ function AllDeals({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate; c
         <span className="muted">{open.length} across {db.brokers.length} brokers · click a column to sort</span>
       </div>
       {open.length ? (
+        <div className="table-wrap">
         <table>
           <thead><tr>
             <SortableTh label="Broker" sortKey="broker" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
@@ -213,6 +214,7 @@ function AllDeals({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate; c
             })}
           </tbody>
         </table>
+        </div>
       ) : <div className="empty">No open deals in the pipeline.</div>}
       {editingDeal && (
         <TimeEntriesModal
@@ -290,6 +292,7 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
       <div className="card">
         <div className="section-title"><h3>Open escalations</h3><span className="muted">{escs.length} flagged · click a column to sort</span></div>
         {escs.length ? (
+          <div className="table-wrap">
           <table>
             <thead><tr>
               <SortableTh label="Broker" sortKey="broker" currentKey={openSortKey} currentDir={openSortDir} onSort={handleOpenSort} />
@@ -305,6 +308,7 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
               })}
             </tbody>
           </table>
+          </div>
         ) : <div className="empty">No open escalations. 🎉</div>}
       </div>
       <div className="card">
@@ -313,6 +317,7 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
           <span className="muted">{avgResolutionMinutes !== null ? `Avg resolution time: ${formatBusinessDuration(avgResolutionMinutes)}` : "No resolutions yet"}</span>
         </div>
         {resolved.length ? (
+          <div className="table-wrap">
           <table>
             <thead><tr>
               <SortableTh label="Broker" sortKey="broker" currentKey={resolvedSortKey} currentDir={resolvedSortDir} onSort={handleResolvedSort} />
@@ -336,6 +341,7 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
               ))}
             </tbody>
           </table>
+          </div>
         ) : <div className="empty">Resolved escalations will show up here, with how long each one took.</div>}
       </div>
     </>
@@ -424,6 +430,7 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
       <div className="card">
         <div className="section-title"><h3>Weekly summary — {wr.label}</h3><button className="btn small" onClick={exportCsv}>Export CSV</button></div>
         {rows.length ? (
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -452,11 +459,13 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
               ))}
             </tbody>
           </table>
+          </div>
         ) : <div className="empty">No brokers yet.</div>}
       </div>
       <div className="card">
         <div className="section-title"><h3>Capacity comments — {wr.label}</h3><span className="muted">Roadblocks and support needed, from each broker's weekly check-in</span></div>
         {rows.filter((r) => r.comments.trim()).length ? (
+          <div className="table-wrap">
           <table>
             <thead><tr>
               <SortableTh label="Broker" sortKey="broker" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
@@ -473,6 +482,7 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <div className="empty">No comments left in anyone's check-in this week.</div>
         )}
@@ -511,6 +521,7 @@ function ManageBrokers({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
       <div className="card">
         <h3 style={{ marginBottom: 14 }}>Current team ({db.brokers.length})</h3>
         {db.brokers.length ? (
+          <div className="table-wrap">
           <table>
             <thead><tr><SortableTh label="Name" sortKey="name" currentKey="name" currentDir={sortDir} onSort={handleSort} /><th></th></tr></thead>
             <tbody>
@@ -519,6 +530,7 @@ function ManageBrokers({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
               ))}
             </tbody>
           </table>
+          </div>
         ) : <div className="empty">No brokers added yet.</div>}
         <p className="muted" style={{ marginTop: 10 }}>Removing a broker only hides them from the check-in screen — their past logs, deals, and history stay in the data.</p>
       </div>
