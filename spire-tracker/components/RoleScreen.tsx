@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 
 export default function RoleScreen({
   brokers,
@@ -9,6 +10,34 @@ export default function RoleScreen({
   onSelectBroker: (name: string) => void;
   onSelectOps: () => void;
 }) {
+  const [showOpsPrompt, setShowOpsPrompt] = useState(false);
+  const [opsPassword, setOpsPassword] = useState("");
+  const [opsError, setOpsError] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  async function submitOpsPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setChecking(true);
+    setOpsError("");
+    try {
+      const res = await fetch("/api/login-ops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: opsPassword }),
+      });
+      if (res.ok) {
+        onSelectOps();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setOpsError(data.error || "Incorrect password");
+      }
+    } catch {
+      setOpsError("Something went wrong. Try again.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <div className="app-shell" style={{ maxWidth: 640, paddingTop: 80, textAlign: "center" }}>
       <div className="brandmark" style={{ fontSize: 30 }}>
@@ -30,13 +59,36 @@ export default function RoleScreen({
         )}
       </div>
       <div style={{ margin: "26px 0 10px", borderTop: "1px solid var(--lbg)", paddingTop: 20 }}>
-        <div
-          className="rolecard"
-          style={{ display: "inline-block", background: "var(--charcoal)", color: "#fff" }}
-          onClick={onSelectOps}
-        >
-          Ops Manager
-        </div>
+        {!showOpsPrompt ? (
+          <div
+            className="rolecard"
+            style={{ display: "inline-block", background: "var(--charcoal)", color: "#fff" }}
+            onClick={() => setShowOpsPrompt(true)}
+          >
+            Ops Manager
+          </div>
+        ) : (
+          <form onSubmit={submitOpsPassword} style={{ maxWidth: 300, margin: "0 auto", textAlign: "left" }}>
+            <div className="field">
+              <label>Ops manager password</label>
+              <input
+                type="password"
+                value={opsPassword}
+                onChange={(e) => setOpsPassword(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn secondary" type="button" onClick={() => { setShowOpsPrompt(false); setOpsPassword(""); setOpsError(""); }}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" disabled={checking} style={{ flex: 1 }}>
+                {checking ? "Checking…" : "Enter"}
+              </button>
+            </div>
+            {opsError && <div className="login-error">{opsError}</div>}
+          </form>
+        )}
       </div>
     </div>
   );
