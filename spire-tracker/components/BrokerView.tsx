@@ -5,6 +5,7 @@ import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPEN
 import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
+import TimeEntriesModal from "./TimeEntriesModal";
 import type { Mutate } from "@/app/page";
 
 type Tab = "log" | "deals" | "capacity";
@@ -243,6 +244,7 @@ function DealRow({
   const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
   const [showLogTime, setShowLogTime] = useState(false);
+  const [showEntries, setShowEntries] = useState(false);
   const recentResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0] || null;
   const dealLogs = db.logs.filter((l) => l.dealId === deal.id);
   const dealMinutes = dealLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
@@ -294,6 +296,9 @@ function DealRow({
             <div key={stage} style={{ fontSize: 11 }}>{stage}: {(mins / 60).toFixed(1)}h</div>
           ))}
           <button className="x-link" style={{ color: "var(--charcoal)", paddingLeft: 0 }} onClick={() => setShowLogTime(true)}>+ Log time</button>
+          {dealLogs.length > 0 && (
+            <button className="x-link" style={{ color: "var(--greyblue)", paddingLeft: 0 }} onClick={() => setShowEntries(true)}>View entries</button>
+          )}
         </td>
         <td>
           <label className="checkrow">
@@ -335,6 +340,9 @@ function DealRow({
       {showLogTime && (
         <LogTimeModal deal={deal} broker={broker} mutate={mutate} onClose={() => setShowLogTime(false)} />
       )}
+      {showEntries && (
+        <TimeEntriesModal dealLabel={`${clientName(deal.clientId)} — ${deal.stage}`} logs={dealLogs} mutate={mutate} allowEdit={false} onClose={() => setShowEntries(false)} />
+      )}
     </>
   );
 }
@@ -345,6 +353,8 @@ function LogTimeModal({
   const [type, setType] = useState(CONTACT_TYPES[0]);
   const [timeSpent, setTimeSpent] = useState(TIME_SPENT_OPTIONS[0].minutes);
   const [notes, setNotes] = useState("");
+  const [escalate, setEscalate] = useState(false);
+  const [escalateReason, setEscalateReason] = useState("");
 
   async function save() {
     await mutate("logs", (arr) => [...arr, {
@@ -352,7 +362,12 @@ function LogTimeModal({
       type, outcome: "Other", notes: notes.trim(), timeSpentMinutes: timeSpent,
       dealId: deal.id, stageAtLog: deal.stage,
     }]);
-    showToast("Time logged");
+    if (escalate && !deal.escalation) {
+      await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
+        ? { ...d, escalation: true, escalatedAt: nowISO(), escalationReason: escalateReason.trim() || notes.trim(), opsResponse: "" }
+        : d));
+    }
+    showToast(escalate ? "Time logged and deal flagged" : "Time logged");
     onClose();
   }
 
@@ -376,6 +391,23 @@ function LogTimeModal({
           <label>Notes (optional)</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What did this time cover?" />
         </div>
+        {!deal.escalation && (
+          <div className="field">
+            <label className="checkrow" style={{ textTransform: "none", fontWeight: 600, color: "var(--charcoal)" }}>
+              <input type="checkbox" checked={escalate} onChange={(e) => setEscalate(e.target.checked)} />
+              This work turned up a problem — flag this deal for ops
+            </label>
+            {escalate && (
+              <input
+                type="text"
+                placeholder="What does ops need to know? (defaults to your notes above if left blank)"
+                value={escalateReason}
+                onChange={(e) => setEscalateReason(e.target.value)}
+                style={{ marginTop: 8, border: "1px solid var(--danger)" }}
+              />
+            )}
+          </div>
+        )}
         <div className="flexend">
           <button className="btn secondary" onClick={onClose}>Cancel</button>
           <button className="btn" onClick={save}>Log time</button>

@@ -5,6 +5,7 @@ import { ACTIVE_STAGES, BOTTLENECK_DAYS, CONTACT_TYPES } from "@/lib/constants";
 import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDateTime } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
+import TimeEntriesModal from "./TimeEntriesModal";
 import type { Mutate } from "@/app/page";
 
 type Tab = "overview" | "deals" | "escalations" | "report" | "brokers";
@@ -33,7 +34,7 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
         ))}
       </div>
       {tab === "overview" && <Overview db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
-      {tab === "deals" && <AllDeals db={db} clientName={clientName} />}
+      {tab === "deals" && <AllDeals db={db} mutate={mutate} clientName={clientName} />}
       {tab === "escalations" && <Escalations db={db} mutate={mutate} clientName={clientName} />}
       {tab === "report" && <Report db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
       {tab === "brokers" && <ManageBrokers db={db} mutate={mutate} />}
@@ -142,11 +143,13 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
   );
 }
 
-function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) => string }) {
+function AllDeals({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate; clientName: (id: string) => string }) {
+  const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const open = db.deals
     .filter((d) => ACTIVE_STAGES.includes(d.stage))
     .slice()
     .sort((a, b) => daysBetween(b.stageEnteredDate, todayISO()) - daysBetween(a.stageEnteredDate, todayISO()));
+  const editingDeal = editingDealId ? db.deals.find((d) => d.id === editingDealId) : null;
 
   return (
     <div className="card">
@@ -181,6 +184,7 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
                     {Object.entries(minutesByStage).map(([stage, mins]) => (
                       <div key={stage} style={{ fontSize: 11 }}>{stage}: {(mins / 60).toFixed(1)}h</div>
                     ))}
+                    <button className="x-link" style={{ color: "var(--charcoal)", paddingLeft: 0 }} onClick={() => setEditingDealId(d.id)}>Edit time</button>
                   </td>
                   <td>{d.escalation ? <span className="pill bad">Flagged</span> : "—"}</td>
                 </tr>
@@ -189,6 +193,15 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
           </tbody>
         </table>
       ) : <div className="empty">No open deals in the pipeline.</div>}
+      {editingDeal && (
+        <TimeEntriesModal
+          dealLabel={`${clientName(editingDeal.clientId)} — ${editingDeal.stage}`}
+          logs={db.logs.filter((l) => l.dealId === editingDeal.id)}
+          mutate={mutate}
+          allowEdit={true}
+          onClose={() => setEditingDealId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -314,6 +327,7 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
       escalations: open.filter((d) => d.escalation).length,
       hoursLogged: (minutes / 60).toFixed(1),
       capStatus: cap?.status ?? "—", capCalls: cap?.callsCapacity ?? "—", capDeals: cap?.dealsCapacity ?? "—",
+      comments: cap?.comments ?? "",
     };
   });
 
@@ -362,6 +376,25 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
             </tbody>
           </table>
         ) : <div className="empty">No brokers yet.</div>}
+      </div>
+      <div className="card">
+        <div className="section-title"><h3>Capacity comments — {wr.label}</h3><span className="muted">Roadblocks and support needed, from each broker's weekly check-in</span></div>
+        {rows.filter((r) => r.comments.trim()).length ? (
+          <table>
+            <thead><tr><th>Broker</th><th>Self-reported load</th><th>Comments</th></tr></thead>
+            <tbody>
+              {rows.filter((r) => r.comments.trim()).map((r) => (
+                <tr key={r.broker}>
+                  <td><b>{r.broker}</b></td>
+                  <td><span className={`pill ${r.capStatus === "At Capacity" ? "bad" : r.capStatus === "Moderate" ? "warn" : "ok"}`}>{r.capStatus}</span></td>
+                  <td>{r.comments}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="empty">No comments left in anyone's check-in this week.</div>
+        )}
       </div>
     </>
   );
