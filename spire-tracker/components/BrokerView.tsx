@@ -137,7 +137,8 @@ function LogTab({
       clientId = newClient.id;
     }
     const dealId = dealSel === "__none__" ? null : dealSel;
-    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent, dealId }]);
+    const stageAtLog = dealId ? (db.deals.find((d) => d.id === dealId)?.stage ?? null) : null;
+    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent, dealId, stageAtLog }]);
     setNewClientName(""); setNotes(""); setDealSel("__none__");
     showToast("Logged");
   }
@@ -233,7 +234,13 @@ function DealRow({
   const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
   const recentResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0] || null;
-  const dealMinutes = db.logs.filter((l) => l.dealId === deal.id).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
+  const dealLogs = db.logs.filter((l) => l.dealId === deal.id);
+  const dealMinutes = dealLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
+  const minutesByStage: Record<string, number> = {};
+  dealLogs.forEach((l) => {
+    const key = l.stageAtLog || "Unspecified stage";
+    minutesByStage[key] = (minutesByStage[key] || 0) + (l.timeSpentMinutes || 0);
+  });
 
   async function updateStage(stage: string) {
     if (stage === deal.stage) return;
@@ -271,7 +278,12 @@ function DealRow({
           </select>
         </td>
         <td>${Number(deal.value || 0).toLocaleString()}</td>
-        <td className="muted">{(dealMinutes / 60).toFixed(1)} hrs</td>
+        <td className="muted">
+          <div>{(dealMinutes / 60).toFixed(1)} hrs total</div>
+          {Object.entries(minutesByStage).map(([stage, mins]) => (
+            <div key={stage} style={{ fontSize: 11 }}>{stage}: {(mins / 60).toFixed(1)}h</div>
+          ))}
+        </td>
         <td>
           <label className="checkrow">
             <input type="checkbox" checked={deal.escalation} onChange={(e) => toggleEsc(e.target.checked)} />

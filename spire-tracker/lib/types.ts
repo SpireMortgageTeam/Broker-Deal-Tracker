@@ -33,6 +33,7 @@ export interface ContactLog {
   notes: string;
   timeSpentMinutes: number;
   dealId: string | null; // which deal this time/touch applies to, if any
+  stageAtLog: string | null; // the deal's stage at the moment this was logged
 }
 
 export interface EscalationRecord {

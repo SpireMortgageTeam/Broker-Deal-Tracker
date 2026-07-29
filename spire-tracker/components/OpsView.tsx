@@ -161,7 +161,13 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
             {open.map((d) => {
               const days = daysBetween(d.stageEnteredDate, todayISO());
               const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
-              const dealMinutes = db.logs.filter((l) => l.dealId === d.id).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
+              const dealLogs = db.logs.filter((l) => l.dealId === d.id);
+              const dealMinutes = dealLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
+              const minutesByStage: Record<string, number> = {};
+              dealLogs.forEach((l) => {
+                const key = l.stageAtLog || "Unspecified stage";
+                minutesByStage[key] = (minutesByStage[key] || 0) + (l.timeSpentMinutes || 0);
+              });
               return (
                 <tr key={d.id}>
                   <td>{d.broker}</td>
@@ -170,7 +176,12 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
                   <td><span className={`pill ${cls}`}>{days}d</span></td>
                   <td>{d.docStatus}</td>
                   <td>${Number(d.value || 0).toLocaleString()}</td>
-                  <td className="muted">{(dealMinutes / 60).toFixed(1)} hrs</td>
+                  <td className="muted">
+                    <div>{(dealMinutes / 60).toFixed(1)} hrs total</div>
+                    {Object.entries(minutesByStage).map(([stage, mins]) => (
+                      <div key={stage} style={{ fontSize: 11 }}>{stage}: {(mins / 60).toFixed(1)}h</div>
+                    ))}
+                  </td>
                   <td>{d.escalation ? <span className="pill bad">Flagged</span> : "—"}</td>
                 </tr>
               );
