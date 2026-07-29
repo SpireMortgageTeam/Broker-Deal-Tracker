@@ -343,14 +343,13 @@ function LogTimeModal({
   deal, broker, mutate, onClose,
 }: { deal: Deal; broker: string; mutate: Mutate; onClose: () => void }) {
   const [type, setType] = useState(CONTACT_TYPES[0]);
-  const [outcome, setOutcome] = useState(OUTCOMES[0]);
   const [timeSpent, setTimeSpent] = useState(TIME_SPENT_OPTIONS[0].minutes);
   const [notes, setNotes] = useState("");
 
   async function save() {
     await mutate("logs", (arr) => [...arr, {
       id: uid(), clientId: deal.clientId, broker, date: todayISO(),
-      type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent,
+      type, outcome: "Other", notes: notes.trim(), timeSpentMinutes: timeSpent,
       dealId: deal.id, stageAtLog: deal.stage,
     }]);
     showToast("Time logged");
@@ -365,12 +364,6 @@ function LogTimeModal({
           <label>Activity type</label>
           <select value={type} onChange={(e) => setType(e.target.value as any)}>
             {CONTACT_TYPES.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label>Outcome</label>
-          <select value={outcome} onChange={(e) => setOutcome(e.target.value as any)}>
-            {OUTCOMES.map((o) => <option key={o}>{o}</option>)}
           </select>
         </div>
         <div className="field">
