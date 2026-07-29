@@ -1,4 +1,4 @@
-import { Stage, ContactType, Outcome, DocStatus } from "./types";
+import { Stage, ContactType, Outcome, DocStatus, ClientSource } from "./types";
 
 export const STAGES: Stage[] = [
   "Doc Collection",
@@ -54,6 +54,8 @@ export const OUTCOMES: Outcome[] = [
 ];
 
 export const DOC_STATUSES: DocStatus[] = ["Complete", "Partial", "None"];
+
+export const CLIENT_SOURCES: ClientSource[] = ["New Lead", "Pre-Approval Revival", "Renewal", "Ownwell"];
 
 // Days a deal can sit at one stage before it's flagged as a bottleneck.
 // Change this one number if 7 days doesn't match your team's reality.

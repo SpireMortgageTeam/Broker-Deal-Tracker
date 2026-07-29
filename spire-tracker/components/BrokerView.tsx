@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { TrackerDB, Deal, DocStatus, WorkloadStatus } from "@/lib/types";
-import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS } from "@/lib/constants";
+import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource } from "@/lib/types";
+import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
@@ -114,6 +114,7 @@ function LogTab({
 }) {
   const [clientSel, setClientSel] = useState("__new__");
   const [newClientName, setNewClientName] = useState("");
+  const [newClientSource, setNewClientSource] = useState<ClientSource>(CLIENT_SOURCES[0]);
   const [dealSel, setDealSel] = useState("__none__");
   const [type, setType] = useState(CONTACT_TYPES[0]);
   const [outcome, setOutcome] = useState(OUTCOMES[0]);
@@ -132,7 +133,7 @@ function LogTab({
     if (clientId === "__new__") {
       const name = newClientName.trim();
       if (!name) { showToast("Enter a client name first"); return; }
-      const newClient = { id: uid(), name, broker, createdDate: todayISO() };
+      const newClient = { id: uid(), name, broker, createdDate: todayISO(), source: newClientSource };
       await mutate("clients", (arr) => [...arr, newClient]);
       clientId = newClient.id;
     }
@@ -163,6 +164,14 @@ function LogTab({
             <div className="field">
               <label>New client name</label>
               <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Full name" />
+            </div>
+          )}
+          {clientSel === "__new__" && (
+            <div className="field">
+              <label>Client category</label>
+              <select value={newClientSource} onChange={(e) => setNewClientSource(e.target.value as ClientSource)}>
+                {CLIENT_SOURCES.map((s) => <option key={s}>{s}</option>)}
+              </select>
             </div>
           )}
           {clientSel !== "__new__" && clientDeals.length > 0 && (
@@ -266,7 +275,7 @@ function DealRow({
   return (
     <>
       <tr>
-        <td><b>{clientName(deal.clientId)}</b></td>
+        <td><b>{clientName(deal.clientId)}</b><div className="muted" style={{ fontSize: 11 }}>{db.clients.find((c) => c.id === deal.clientId)?.source || ""}</div></td>
         <td>
           <select className="inline-select" value={deal.stage} onChange={(e) => updateStage(e.target.value)}>
             {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -388,6 +397,7 @@ function NewDealModal({
 }: { broker: string; myClients: TrackerDB["clients"]; mutate: Mutate; onClose: () => void }) {
   const [clientSel, setClientSel] = useState("__new__");
   const [newClientName, setNewClientName] = useState("");
+  const [newClientSource, setNewClientSource] = useState<ClientSource>(CLIENT_SOURCES[0]);
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(ACTIVE_STAGES[0]);
 
@@ -396,7 +406,7 @@ function NewDealModal({
     if (clientId === "__new__") {
       const name = newClientName.trim();
       if (!name) { showToast("Enter a client name"); return; }
-      const nc = { id: uid(), name, broker, createdDate: todayISO() };
+      const nc = { id: uid(), name, broker, createdDate: todayISO(), source: newClientSource };
       await mutate("clients", (arr) => [...arr, nc]);
       clientId = nc.id;
     }
@@ -426,6 +436,14 @@ function NewDealModal({
           <div className="field">
             <label>New client name</label>
             <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} />
+          </div>
+        )}
+        {clientSel === "__new__" && (
+          <div className="field">
+            <label>Client category</label>
+            <select value={newClientSource} onChange={(e) => setNewClientSource(e.target.value as ClientSource)}>
+              {CLIENT_SOURCES.map((s) => <option key={s}>{s}</option>)}
+            </select>
           </div>
         )}
         <div className="field">

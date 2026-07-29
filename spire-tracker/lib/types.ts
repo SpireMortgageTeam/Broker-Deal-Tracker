@@ -16,11 +16,14 @@ export type Outcome =
 export type DocStatus = "Complete" | "Partial" | "None";
 export type WorkloadStatus = "Low" | "Moderate" | "At Capacity";
 
+export type ClientSource = "New Lead" | "Pre-Approval Revival" | "Renewal" | "Ownwell";
+
 export interface Client {
   id: string;
   name: string;
   broker: string;
   createdDate: string; // ISO date
+  source: ClientSource;
 }
 
 export interface ContactLog {

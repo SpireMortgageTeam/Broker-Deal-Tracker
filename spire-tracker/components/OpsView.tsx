@@ -171,7 +171,7 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
               return (
                 <tr key={d.id}>
                   <td>{d.broker}</td>
-                  <td><b>{clientName(d.clientId)}</b></td>
+                  <td><b>{clientName(d.clientId)}</b><div className="muted" style={{ fontSize: 11 }}>{db.clients.find((c) => c.id === d.clientId)?.source || ""}</div></td>
                   <td><span className="pill">{d.stage}</span></td>
                   <td><span className={`pill ${cls}`}>{days}d</span></td>
                   <td>{d.docStatus}</td>
