@@ -2,10 +2,11 @@
 import { useState } from "react";
 import { TrackerDB } from "@/lib/types";
 import { ACTIVE_STAGES, BOTTLENECK_DAYS, CONTACT_TYPES } from "@/lib/constants";
-import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDateTime } from "@/lib/utils";
+import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDateTime, totalMinutesForDeal } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import TimeEntriesModal from "./TimeEntriesModal";
+import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
 type Tab = "overview" | "deals" | "escalations" | "report" | "brokers";
@@ -145,21 +146,41 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
 
 function AllDeals({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate; clientName: (id: string) => string }) {
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
-  const open = db.deals
-    .filter((d) => ACTIVE_STAGES.includes(d.stage))
-    .slice()
-    .sort((a, b) => daysBetween(b.stageEnteredDate, todayISO()) - daysBetween(a.stageEnteredDate, todayISO()));
+  const [sortKey, setSortKey] = useState<string | null>("aging");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const handleSort = makeSortHandler(sortKey, setSortKey, sortDir, setSortDir);
+  const openUnsorted = db.deals.filter((d) => ACTIVE_STAGES.includes(d.stage));
+  const open = sortRows(openUnsorted, sortKey, sortDir, (d, key) => {
+    if (key === "broker") return d.broker;
+    if (key === "client") return clientName(d.clientId);
+    if (key === "stage") return d.stage;
+    if (key === "aging") return daysBetween(d.stageEnteredDate, todayISO());
+    if (key === "docs") return d.docStatus;
+    if (key === "value") return d.value || 0;
+    if (key === "time") return totalMinutesForDeal(db.logs, d.id);
+    if (key === "status") return d.escalation ? 1 : 0;
+    return "";
+  });
   const editingDeal = editingDealId ? db.deals.find((d) => d.id === editingDealId) : null;
 
   return (
     <div className="card">
       <div className="section-title">
         <h3>All open deals</h3>
-        <span className="muted">{open.length} across {db.brokers.length} brokers · sorted by longest at current stage</span>
+        <span className="muted">{open.length} across {db.brokers.length} brokers · click a column to sort</span>
       </div>
       {open.length ? (
         <table>
-          <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Time Logged</th><th>Status</th></tr></thead>
+          <thead><tr>
+            <SortableTh label="Broker" sortKey="broker" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Client" sortKey="client" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Stage" sortKey="stage" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Aging" sortKey="aging" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Docs" sortKey="docs" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Value" sortKey="value" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Time Logged" sortKey="time" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Status" sortKey="status" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+          </tr></thead>
           <tbody>
             {open.map((d) => {
               const days = daysBetween(d.stageEnteredDate, todayISO());
@@ -207,11 +228,33 @@ function AllDeals({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate; c
 }
 
 function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate; clientName: (id: string) => string }) {
-  const escs = db.deals.filter((d) => d.escalation).slice().sort((a, b) => (a.escalatedAt || "").localeCompare(b.escalatedAt || ""));
+  const [openSortKey, setOpenSortKey] = useState<string | null>("flagged");
+  const [openSortDir, setOpenSortDir] = useState<SortDir>("desc");
+  const handleOpenSort = makeSortHandler(openSortKey, setOpenSortKey, openSortDir, setOpenSortDir);
 
-  const resolved = db.deals
-    .flatMap((d) => (d.escalationHistory || []).map((r) => ({ ...r, broker: d.broker, clientId: d.clientId })))
-    .sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
+  const [resolvedSortKey, setResolvedSortKey] = useState<string | null>("resolvedAt");
+  const [resolvedSortDir, setResolvedSortDir] = useState<SortDir>("desc");
+  const handleResolvedSort = makeSortHandler(resolvedSortKey, setResolvedSortKey, resolvedSortDir, setResolvedSortDir);
+
+  const escsUnsorted = db.deals.filter((d) => d.escalation);
+  const escs = sortRows(escsUnsorted, openSortKey, openSortDir, (d, key) => {
+    if (key === "broker") return d.broker;
+    if (key === "client") return clientName(d.clientId);
+    if (key === "stage") return d.stage;
+    if (key === "flagged") return d.escalatedAt ? businessMinutesBetween(d.escalatedAt, nowISO()) : 0;
+    return "";
+  });
+
+  const resolvedUnsorted = db.deals
+    .flatMap((d) => (d.escalationHistory || []).map((r) => ({ ...r, broker: d.broker, clientId: d.clientId })));
+  const resolved = sortRows(resolvedUnsorted, resolvedSortKey, resolvedSortDir, (r, key) => {
+    if (key === "broker") return r.broker;
+    if (key === "client") return clientName(r.clientId);
+    if (key === "escalatedAt") return r.escalatedAt;
+    if (key === "resolvedAt") return r.resolvedAt;
+    if (key === "time") return businessMinutesBetween(r.escalatedAt, r.resolvedAt);
+    return "";
+  });
   const avgResolutionMinutes = resolved.length
     ? resolved.reduce((sum, r) => sum + businessMinutesBetween(r.escalatedAt, r.resolvedAt), 0) / resolved.length
     : null;
@@ -245,10 +288,16 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
   return (
     <>
       <div className="card">
-        <div className="section-title"><h3>Open escalations</h3><span className="muted">{escs.length} flagged, oldest first</span></div>
+        <div className="section-title"><h3>Open escalations</h3><span className="muted">{escs.length} flagged · click a column to sort</span></div>
         {escs.length ? (
           <table>
-            <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Time flagged (business hrs)</th><th>Reason / needed</th><th>Your response</th><th></th></tr></thead>
+            <thead><tr>
+              <SortableTh label="Broker" sortKey="broker" currentKey={openSortKey} currentDir={openSortDir} onSort={handleOpenSort} />
+              <SortableTh label="Client" sortKey="client" currentKey={openSortKey} currentDir={openSortDir} onSort={handleOpenSort} />
+              <SortableTh label="Stage" sortKey="stage" currentKey={openSortKey} currentDir={openSortDir} onSort={handleOpenSort} />
+              <SortableTh label="Time flagged (business hrs)" sortKey="flagged" currentKey={openSortKey} currentDir={openSortDir} onSort={handleOpenSort} />
+              <th>Reason / needed</th><th>Your response</th><th></th>
+            </tr></thead>
             <tbody>
               {escs.map((d) => {
                 const flaggedMinutes = d.escalatedAt ? businessMinutesBetween(d.escalatedAt, nowISO()) : 0;
@@ -265,7 +314,14 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
         </div>
         {resolved.length ? (
           <table>
-            <thead><tr><th>Broker</th><th>Client</th><th>Reason</th><th>Response</th><th>Escalated</th><th>Resolved</th><th>Time to resolve (business hrs)</th></tr></thead>
+            <thead><tr>
+              <SortableTh label="Broker" sortKey="broker" currentKey={resolvedSortKey} currentDir={resolvedSortDir} onSort={handleResolvedSort} />
+              <SortableTh label="Client" sortKey="client" currentKey={resolvedSortKey} currentDir={resolvedSortDir} onSort={handleResolvedSort} />
+              <th>Reason</th><th>Response</th>
+              <SortableTh label="Escalated" sortKey="escalatedAt" currentKey={resolvedSortKey} currentDir={resolvedSortDir} onSort={handleResolvedSort} />
+              <SortableTh label="Resolved" sortKey="resolvedAt" currentKey={resolvedSortKey} currentDir={resolvedSortDir} onSort={handleResolvedSort} />
+              <SortableTh label="Time to resolve (business hrs)" sortKey="time" currentKey={resolvedSortKey} currentDir={resolvedSortDir} onSort={handleResolvedSort} />
+            </tr></thead>
             <tbody>
               {resolved.slice(0, 25).map((r) => (
                 <tr key={r.id}>
@@ -316,7 +372,10 @@ function EscalationRow({
 
 function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: number; setWeekOffset: (n: number) => void }) {
   const wr = weekRange(weekOffset);
-  const rows = db.brokers.map((b) => {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const handleSort = makeSortHandler(sortKey, setSortKey, sortDir, setSortDir);
+  const rowsUnsorted = db.brokers.map((b) => {
     const touches = db.logs.filter((l) => l.broker === b && inRange(l.date, wr.start, wr.end));
     const open = db.deals.filter((d) => d.broker === b && ACTIVE_STAGES.includes(d.stage));
     const cap = db.capacity.find((c) => c.broker === b && c.weekStart === wr.start);
@@ -326,9 +385,20 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
       bottlenecks: open.filter((d) => daysBetween(d.stageEnteredDate, todayISO()) > BOTTLENECK_DAYS).length,
       escalations: open.filter((d) => d.escalation).length,
       hoursLogged: (minutes / 60).toFixed(1),
+      hoursLoggedNum: minutes / 60,
       capStatus: cap?.status ?? "—", capCalls: cap?.callsCapacity ?? "—", capDeals: cap?.dealsCapacity ?? "—",
       comments: cap?.comments ?? "",
     };
+  });
+  const rows = sortRows(rowsUnsorted, sortKey, sortDir, (r, key) => {
+    if (key === "broker") return r.broker;
+    if (key === "touches") return r.touches;
+    if (key === "hours") return r.hoursLoggedNum;
+    if (key === "openDeals") return r.openDeals;
+    if (key === "bottlenecks") return r.bottlenecks;
+    if (key === "escalations") return r.escalations;
+    if (key === "capStatus") return r.capStatus;
+    return "";
   });
 
   function exportCsv() {
@@ -357,7 +427,14 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
           <table>
             <thead>
               <tr>
-                <th>Broker</th><th>Touches</th><th>Hours Logged</th><th>Open deals</th><th>Stuck &gt;{BOTTLENECK_DAYS}d</th><th>Escalations</th><th>Self-reported load</th><th>Next wk capacity (calls/deals)</th>
+                <SortableTh label="Broker" sortKey="broker" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Touches" sortKey="touches" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Hours Logged" sortKey="hours" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Open deals" sortKey="openDeals" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label={`Stuck >${BOTTLENECK_DAYS}d`} sortKey="bottlenecks" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Escalations" sortKey="escalations" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Self-reported load" sortKey="capStatus" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <th>Next wk capacity (calls/deals)</th>
               </tr>
             </thead>
             <tbody>
@@ -381,7 +458,11 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
         <div className="section-title"><h3>Capacity comments — {wr.label}</h3><span className="muted">Roadblocks and support needed, from each broker's weekly check-in</span></div>
         {rows.filter((r) => r.comments.trim()).length ? (
           <table>
-            <thead><tr><th>Broker</th><th>Self-reported load</th><th>Comments</th></tr></thead>
+            <thead><tr>
+              <SortableTh label="Broker" sortKey="broker" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Self-reported load" sortKey="capStatus" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <th>Comments</th>
+            </tr></thead>
             <tbody>
               {rows.filter((r) => r.comments.trim()).map((r) => (
                 <tr key={r.broker}>
@@ -402,6 +483,9 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
 
 function ManageBrokers({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
   const [name, setName] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const sortedBrokers = sortRows(db.brokers, "name", sortDir, (b) => b);
+  const handleSort = (_key: string) => setSortDir(sortDir === "asc" ? "desc" : "asc");
 
   async function add() {
     const trimmed = name.trim();
@@ -428,9 +512,9 @@ function ManageBrokers({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
         <h3 style={{ marginBottom: 14 }}>Current team ({db.brokers.length})</h3>
         {db.brokers.length ? (
           <table>
-            <thead><tr><th>Name</th><th></th></tr></thead>
+            <thead><tr><SortableTh label="Name" sortKey="name" currentKey="name" currentDir={sortDir} onSort={handleSort} /><th></th></tr></thead>
             <tbody>
-              {db.brokers.map((b) => (
+              {sortedBrokers.map((b) => (
                 <tr key={b}><td>{b}</td><td><button className="x-link" onClick={() => remove(b)}>Remove</button></td></tr>
               ))}
             </tbody>

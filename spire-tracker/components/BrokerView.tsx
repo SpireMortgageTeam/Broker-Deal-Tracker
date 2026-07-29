@@ -2,10 +2,11 @@
 import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource } from "@/lib/types";
 import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES } from "@/lib/constants";
-import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo } from "@/lib/utils";
+import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo, totalMinutesForDeal } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import TimeEntriesModal from "./TimeEntriesModal";
+import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
 type Tab = "log" | "deals" | "capacity";
@@ -21,6 +22,9 @@ export default function BrokerView({
 }) {
   const [tab, setTab] = useState<Tab>("log");
   const [showNewDeal, setShowNewDeal] = useState(false);
+  const [dealsSortKey, setDealsSortKey] = useState<string | null>(null);
+  const [dealsSortDir, setDealsSortDir] = useState<SortDir>("asc");
+  const handleDealsSort = makeSortHandler(dealsSortKey, setDealsSortKey, dealsSortDir, setDealsSortDir);
 
   const myClients = db.clients.filter((c) => c.broker === broker);
   const myDeals = db.deals.filter((d) => d.broker === broker);
@@ -33,6 +37,17 @@ export default function BrokerView({
   function clientName(id: string) {
     return db.clients.find((c) => c.id === id)?.name ?? "(unknown client)";
   }
+
+  const myOpenDealsSorted = sortRows(myOpenDeals, dealsSortKey, dealsSortDir, (d, key) => {
+    if (key === "client") return clientName(d.clientId);
+    if (key === "stage") return d.stage;
+    if (key === "aging") return daysBetween(d.stageEnteredDate, todayISO());
+    if (key === "docs") return d.docStatus;
+    if (key === "value") return d.value || 0;
+    if (key === "time") return totalMinutesForDeal(db.logs, d.id);
+    if (key === "escalate") return d.escalation ? 1 : 0;
+    return "";
+  });
 
   return (
     <>
@@ -79,11 +94,18 @@ export default function BrokerView({
               <table>
                 <thead>
                   <tr>
-                    <th>Client</th><th>Stage</th><th>Aging</th><th>Docs</th><th>Value</th><th>Time Logged</th><th>Escalate</th><th></th>
+                    <SortableTh label="Client" sortKey="client" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Stage" sortKey="stage" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Aging" sortKey="aging" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Docs" sortKey="docs" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Value" sortKey="value" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Time Logged" sortKey="time" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <SortableTh label="Escalate" sortKey="escalate" currentKey={dealsSortKey} currentDir={dealsSortDir} onSort={handleDealsSort} />
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {myOpenDeals.map((d) => (
+                  {myOpenDealsSorted.map((d) => (
                     <DealRow key={d.id} deal={d} db={db} mutate={mutate} clientName={clientName} broker={broker} />
                   ))}
                 </tbody>
@@ -128,6 +150,16 @@ function LogTab({
     .filter((l) => l.broker === broker && l.date === todayISO())
     .slice()
     .reverse();
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const handleSort = makeSortHandler(sortKey, setSortKey, sortDir, setSortDir);
+  const todaysSorted = sortRows(todays, sortKey, sortDir, (l, key) => {
+    if (key === "client") return clientName(l.clientId);
+    if (key === "type") return l.type;
+    if (key === "outcome") return l.outcome;
+    if (key === "time") return l.timeSpentMinutes;
+    return "";
+  });
 
   async function save() {
     let clientId = clientSel;
@@ -215,9 +247,15 @@ function LogTab({
         <div className="section-title"><h3>Today&apos;s activity</h3><span className="muted">{todays.length} logged</span></div>
         {todays.length ? (
           <table>
-            <thead><tr><th>Client</th><th>Type</th><th>Outcome</th><th>Time</th><th>Notes</th><th></th></tr></thead>
+            <thead><tr>
+              <SortableTh label="Client" sortKey="client" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Type" sortKey="type" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Outcome" sortKey="outcome" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Time" sortKey="time" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <th>Notes</th><th></th>
+            </tr></thead>
             <tbody>
-              {todays.map((l) => (
+              {todaysSorted.map((l) => (
                 <tr key={l.id}>
                   <td>{clientName(l.clientId)}</td>
                   <td><span className="pill">{l.type}</span></td>

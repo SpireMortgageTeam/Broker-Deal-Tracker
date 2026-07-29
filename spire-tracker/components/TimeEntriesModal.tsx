@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ContactLog, TrackerDB } from "@/lib/types";
 import { fmtDate } from "@/lib/utils";
 import { showToast } from "./Toast";
+import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
 export default function TimeEntriesModal({
@@ -14,7 +15,16 @@ export default function TimeEntriesModal({
   allowEdit: boolean;
   onClose: () => void;
 }) {
-  const sorted = logs.slice().sort((a, b) => b.date.localeCompare(a.date));
+  const [sortKey, setSortKey] = useState<string | null>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const handleSort = makeSortHandler(sortKey, setSortKey, sortDir, setSortDir);
+  const sorted = sortRows(logs, sortKey, sortDir, (l, key) => {
+    if (key === "date") return l.date;
+    if (key === "type") return l.type;
+    if (key === "stage") return l.stageAtLog || "";
+    if (key === "time") return l.timeSpentMinutes;
+    return "";
+  });
 
   async function deleteEntry(id: string) {
     await mutate("logs", (arr: TrackerDB["logs"]) => arr.filter((l) => l.id !== id));
@@ -34,7 +44,13 @@ export default function TimeEntriesModal({
         </p>
         {sorted.length ? (
           <table>
-            <thead><tr><th>Date</th><th>Type</th><th>Stage</th><th>Time</th><th>Notes</th><th></th></tr></thead>
+            <thead><tr>
+              <SortableTh label="Date" sortKey="date" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Type" sortKey="type" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Stage" sortKey="stage" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="Time" sortKey="time" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <th>Notes</th><th></th>
+            </tr></thead>
             <tbody>
               {sorted.map((l) => (
                 <EntryRow key={l.id} log={l} allowEdit={allowEdit} onUpdateMinutes={updateMinutes} onDelete={deleteEntry} />
