@@ -25,7 +25,9 @@ export const CONTACT_TYPES: ContactType[] = [
   "Follow-Up Call",
   "Email",
   "Appointment",
-  "Underwriting/Fulfillment",
+  "Underwriting",
+  "Condition Management",
+  "Client Strategy",
 ];
 
 // Dropdown options for time spent on a logged activity. Value is stored in

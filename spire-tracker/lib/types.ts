@@ -5,7 +5,7 @@ export type Stage =
   | "Conditions"
   | "Broker Complete";
 
-export type ContactType = "Initial Call" | "Follow-Up Call" | "Email" | "Appointment" | "Underwriting/Fulfillment";
+export type ContactType = "Initial Call" | "Follow-Up Call" | "Email" | "Appointment" | "Underwriting" | "Condition Management" | "Client Strategy";
 export type Outcome =
   | "Left voicemail"
   | "Spoke with client"
