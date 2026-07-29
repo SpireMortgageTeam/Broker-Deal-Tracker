@@ -83,7 +83,7 @@ export default function BrokerView({
                 </thead>
                 <tbody>
                   {myOpenDeals.map((d) => (
-                    <DealRow key={d.id} deal={d} db={db} mutate={mutate} clientName={clientName} />
+                    <DealRow key={d.id} deal={d} db={db} mutate={mutate} clientName={clientName} broker={broker} />
                   ))}
                 </tbody>
               </table>
@@ -228,11 +228,12 @@ function LogTab({
 }
 
 function DealRow({
-  deal, db, mutate, clientName,
-}: { deal: Deal; db: TrackerDB; mutate: Mutate; clientName: (id: string) => string }) {
+  deal, db, mutate, clientName, broker,
+}: { deal: Deal; db: TrackerDB; mutate: Mutate; clientName: (id: string) => string; broker: string }) {
   const days = daysBetween(deal.stageEnteredDate, todayISO());
   const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
+  const [showLogTime, setShowLogTime] = useState(false);
   const recentResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0] || null;
   const dealLogs = db.logs.filter((l) => l.dealId === deal.id);
   const dealMinutes = dealLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
@@ -283,6 +284,7 @@ function DealRow({
           {Object.entries(minutesByStage).map(([stage, mins]) => (
             <div key={stage} style={{ fontSize: 11 }}>{stage}: {(mins / 60).toFixed(1)}h</div>
           ))}
+          <button className="x-link" style={{ color: "var(--charcoal)", paddingLeft: 0 }} onClick={() => setShowLogTime(true)}>+ Log time</button>
         </td>
         <td>
           <label className="checkrow">
@@ -321,7 +323,63 @@ function DealRow({
           </td>
         </tr>
       )}
+      {showLogTime && (
+        <LogTimeModal deal={deal} broker={broker} mutate={mutate} onClose={() => setShowLogTime(false)} />
+      )}
     </>
+  );
+}
+
+function LogTimeModal({
+  deal, broker, mutate, onClose,
+}: { deal: Deal; broker: string; mutate: Mutate; onClose: () => void }) {
+  const [type, setType] = useState(CONTACT_TYPES[0]);
+  const [outcome, setOutcome] = useState(OUTCOMES[0]);
+  const [timeSpent, setTimeSpent] = useState(TIME_SPENT_OPTIONS[0].minutes);
+  const [notes, setNotes] = useState("");
+
+  async function save() {
+    await mutate("logs", (arr) => [...arr, {
+      id: uid(), clientId: deal.clientId, broker, date: todayISO(),
+      type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent,
+      dealId: deal.id, stageAtLog: deal.stage,
+    }]);
+    showToast("Time logged");
+    onClose();
+  }
+
+  return (
+    <div className="modal-bg" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal">
+        <h3 style={{ marginBottom: 16 }}>Log time on this deal — {deal.stage}</h3>
+        <div className="field">
+          <label>Activity type</label>
+          <select value={type} onChange={(e) => setType(e.target.value as any)}>
+            {CONTACT_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Outcome</label>
+          <select value={outcome} onChange={(e) => setOutcome(e.target.value as any)}>
+            {OUTCOMES.map((o) => <option key={o}>{o}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Time spent</label>
+          <select value={timeSpent} onChange={(e) => setTimeSpent(Number(e.target.value))}>
+            {TIME_SPENT_OPTIONS.map((t) => <option key={t.minutes} value={t.minutes}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Notes (optional)</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What did this time cover?" />
+        </div>
+        <div className="flexend">
+          <button className="btn secondary" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={save}>Log time</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
