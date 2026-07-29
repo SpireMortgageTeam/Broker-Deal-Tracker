@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus } from "@/lib/types";
-import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, RESOLVED_NOTE_VISIBLE_DAYS } from "@/lib/constants";
+import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
@@ -219,8 +219,7 @@ function DealRow({
   const days = daysBetween(deal.stageEnteredDate, todayISO());
   const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
-  const lastResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0];
-  const recentResolution = lastResolution && daysBetween(lastResolution.resolvedAt, todayISO()) <= RESOLVED_NOTE_VISIBLE_DAYS ? lastResolution : null;
+  const recentResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0] || null;
 
   async function updateStage(stage: string) {
     if (stage === deal.stage) return;

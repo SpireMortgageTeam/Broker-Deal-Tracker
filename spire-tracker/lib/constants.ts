@@ -57,10 +57,6 @@ export const DOC_STATUSES: DocStatus[] = ["Complete", "Partial", "None"];
 // Change this one number if 7 days doesn't match your team's reality.
 export const BOTTLENECK_DAYS = 7;
 
-// How many days a "resolved" note stays visible on the broker's own deal
-// row after ops marks an escalation resolved, before it quietly disappears.
-export const RESOLVED_NOTE_VISIBLE_DAYS = 3;
-
 // KV key names — collections are stored as single JSON blobs since the
 // dataset (a handful of brokers) is small. Simpler than per-record keys.
 export const KV_KEYS = {
