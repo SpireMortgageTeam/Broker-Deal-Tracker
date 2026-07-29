@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { TrackerDB } from "@/lib/types";
 import { ACTIVE_STAGES, BOTTLENECK_DAYS, CONTACT_TYPES } from "@/lib/constants";
-import { todayISO, daysBetween, weekRange, inRange, uid } from "@/lib/utils";
+import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDateTime } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import type { Mutate } from "@/app/page";
@@ -186,8 +186,8 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
   const resolved = db.deals
     .flatMap((d) => (d.escalationHistory || []).map((r) => ({ ...r, broker: d.broker, clientId: d.clientId })))
     .sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
-  const avgResolutionDays = resolved.length
-    ? (resolved.reduce((sum, r) => sum + daysBetween(r.escalatedAt, r.resolvedAt), 0) / resolved.length).toFixed(1)
+  const avgResolutionMinutes = resolved.length
+    ? resolved.reduce((sum, r) => sum + businessMinutesBetween(r.escalatedAt, r.resolvedAt), 0) / resolved.length
     : null;
 
   async function resolve(dealId: string) {
@@ -197,8 +197,8 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
         id: uid(),
         reason: d.escalationReason,
         opsResponse: d.opsResponse,
-        escalatedAt: d.escalatedAt || todayISO(),
-        resolvedAt: todayISO(),
+        escalatedAt: d.escalatedAt || nowISO(),
+        resolvedAt: nowISO(),
       };
       return {
         ...d,
@@ -222,11 +222,11 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
         <div className="section-title"><h3>Open escalations</h3><span className="muted">{escs.length} flagged, oldest first</span></div>
         {escs.length ? (
           <table>
-            <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Flagged</th><th>Reason / needed</th><th>Your response</th><th></th></tr></thead>
+            <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Time flagged (business hrs)</th><th>Reason / needed</th><th>Your response</th><th></th></tr></thead>
             <tbody>
               {escs.map((d) => {
-                const flaggedDays = d.escalatedAt ? daysBetween(d.escalatedAt, todayISO()) : 0;
-                return <EscalationRow key={d.id} deal={d} flaggedDays={flaggedDays} clientName={clientName} onSaveResponse={saveResponse} onResolve={resolve} />;
+                const flaggedMinutes = d.escalatedAt ? businessMinutesBetween(d.escalatedAt, nowISO()) : 0;
+                return <EscalationRow key={d.id} deal={d} flaggedMinutes={flaggedMinutes} clientName={clientName} onSaveResponse={saveResponse} onResolve={resolve} />;
               })}
             </tbody>
           </table>
@@ -235,11 +235,11 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
       <div className="card">
         <div className="section-title">
           <h3>Recently resolved</h3>
-          <span className="muted">{avgResolutionDays !== null ? `Avg resolution time: ${avgResolutionDays}d` : "No resolutions yet"}</span>
+          <span className="muted">{avgResolutionMinutes !== null ? `Avg resolution time: ${formatBusinessDuration(avgResolutionMinutes)}` : "No resolutions yet"}</span>
         </div>
         {resolved.length ? (
           <table>
-            <thead><tr><th>Broker</th><th>Client</th><th>Reason</th><th>Response</th><th>Escalated</th><th>Resolved</th><th>Time to resolve</th></tr></thead>
+            <thead><tr><th>Broker</th><th>Client</th><th>Reason</th><th>Response</th><th>Escalated</th><th>Resolved</th><th>Time to resolve (business hrs)</th></tr></thead>
             <tbody>
               {resolved.slice(0, 25).map((r) => (
                 <tr key={r.id}>
@@ -247,9 +247,9 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
                   <td>{clientName(r.clientId)}</td>
                   <td className="muted">{r.reason || "—"}</td>
                   <td className="muted">{r.opsResponse || "—"}</td>
-                  <td>{r.escalatedAt}</td>
-                  <td>{r.resolvedAt}</td>
-                  <td><span className="pill ok">{daysBetween(r.escalatedAt, r.resolvedAt)}d</span></td>
+                  <td>{fmtDateTime(r.escalatedAt)}</td>
+                  <td>{fmtDateTime(r.resolvedAt)}</td>
+                  <td><span className="pill ok">{formatBusinessDuration(businessMinutesBetween(r.escalatedAt, r.resolvedAt))}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -261,9 +261,9 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
 }
 
 function EscalationRow({
-  deal, flaggedDays, clientName, onSaveResponse, onResolve,
+  deal, flaggedMinutes, clientName, onSaveResponse, onResolve,
 }: {
-  deal: TrackerDB["deals"][number]; flaggedDays: number; clientName: (id: string) => string;
+  deal: TrackerDB["deals"][number]; flaggedMinutes: number; clientName: (id: string) => string;
   onSaveResponse: (dealId: string, text: string) => void; onResolve: (dealId: string) => void;
 }) {
   const [response, setResponse] = useState(deal.opsResponse || "");
@@ -272,7 +272,7 @@ function EscalationRow({
       <td>{deal.broker}</td>
       <td><b>{clientName(deal.clientId)}</b></td>
       <td><span className="pill">{deal.stage}</span></td>
-      <td><span className={`pill ${flaggedDays > 3 ? "bad" : "warn"}`}>{flaggedDays}d flagged</span></td>
+      <td><span className={`pill ${flaggedMinutes > 3 * 9 * 60 ? "bad" : "warn"}`}>{formatBusinessDuration(flaggedMinutes)}</span></td>
       <td className="muted">{deal.escalationReason || "No reason given"}</td>
       <td>
         <input

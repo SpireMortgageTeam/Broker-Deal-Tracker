@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus } from "@/lib/types";
 import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS } from "@/lib/constants";
-import { uid, todayISO, daysBetween, weekRange } from "@/lib/utils";
+import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import type { Mutate } from "@/app/page";
@@ -231,7 +231,7 @@ function DealRow({
   }
   async function toggleEsc(checked: boolean) {
     await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
-      ? { ...d, escalation: checked, escalatedAt: checked ? (d.escalatedAt || todayISO()) : null, opsResponse: checked && !d.escalatedAt ? "" : d.opsResponse }
+      ? { ...d, escalation: checked, escalatedAt: checked ? (d.escalatedAt || nowISO()) : null, opsResponse: checked && !d.escalatedAt ? "" : d.opsResponse }
       : d));
   }
   async function saveReason() {
@@ -289,7 +289,7 @@ function DealRow({
       {!deal.escalation && recentResolution && (
         <tr>
           <td colSpan={7} style={{ borderBottom: "1px solid var(--warmgrey)", background: "#eef4ef" }}>
-            <span className="pill ok">Resolved {daysBetween(recentResolution.resolvedAt, todayISO())}d ago</span>
+            <span className="pill ok">Resolved {daysAgo(recentResolution.resolvedAt)}d ago</span>
             {recentResolution.opsResponse ? <span style={{ marginLeft: 8 }}>{recentResolution.opsResponse}</span> : null}
           </td>
         </tr>

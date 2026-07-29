@@ -38,8 +38,8 @@ export interface EscalationRecord {
   id: string;
   reason: string;
   opsResponse: string;
-  escalatedAt: string;
-  resolvedAt: string;
+  escalatedAt: string; // ISO datetime (not date-only) — needed for business-hours math
+  resolvedAt: string; // ISO datetime
 }
 
 export interface Deal {
@@ -52,7 +52,7 @@ export interface Deal {
   docStatus: DocStatus;
   escalation: boolean;
   escalationReason: string;
-  escalatedAt: string | null; // ISO date
+  escalatedAt: string | null; // ISO datetime (not date-only) — needed for business-hours math
   opsResponse: string; // ops manager's response to the current, unresolved escalation
   escalationHistory: EscalationRecord[]; // past escalations on this deal, resolved
   createdAt: string;
