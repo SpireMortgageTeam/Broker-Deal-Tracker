@@ -25,6 +25,21 @@ export const CONTACT_TYPES: ContactType[] = [
   "Follow-Up Call",
   "Email",
   "Appointment",
+  "Underwriting/Fulfillment",
+];
+
+// Dropdown options for time spent on a logged activity. Value is stored in
+// minutes (for tallying); label is what the broker sees.
+export const TIME_SPENT_OPTIONS: { label: string; minutes: number }[] = [
+  { label: "5 min", minutes: 5 },
+  { label: "10 min", minutes: 10 },
+  { label: "15 min", minutes: 15 },
+  { label: "30 min", minutes: 30 },
+  { label: "45 min", minutes: 45 },
+  { label: "60 min", minutes: 60 },
+  { label: "90 min", minutes: 90 },
+  { label: "120 min", minutes: 120 },
+  { label: "180+ min", minutes: 180 },
 ];
 
 export const OUTCOMES: Outcome[] = [

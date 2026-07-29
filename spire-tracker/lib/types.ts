@@ -5,7 +5,7 @@ export type Stage =
   | "Conditions"
   | "Broker Complete";
 
-export type ContactType = "Initial Call" | "Follow-Up Call" | "Email" | "Appointment";
+export type ContactType = "Initial Call" | "Follow-Up Call" | "Email" | "Appointment" | "Underwriting/Fulfillment";
 export type Outcome =
   | "Left voicemail"
   | "Spoke with client"
@@ -31,6 +31,15 @@ export interface ContactLog {
   type: ContactType;
   outcome: Outcome;
   notes: string;
+  timeSpentMinutes: number;
+}
+
+export interface EscalationRecord {
+  id: string;
+  reason: string;
+  opsResponse: string;
+  escalatedAt: string;
+  resolvedAt: string;
 }
 
 export interface Deal {
@@ -44,6 +53,8 @@ export interface Deal {
   escalation: boolean;
   escalationReason: string;
   escalatedAt: string | null; // ISO date
+  opsResponse: string; // ops manager's response to the current, unresolved escalation
+  escalationHistory: EscalationRecord[]; // past escalations on this deal, resolved
   createdAt: string;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus } from "@/lib/types";
-import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, BOTTLENECK_DAYS } from "@/lib/constants";
+import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
@@ -117,6 +117,7 @@ function LogTab({
   const [type, setType] = useState(CONTACT_TYPES[0]);
   const [outcome, setOutcome] = useState(OUTCOMES[0]);
   const [notes, setNotes] = useState("");
+  const [timeSpent, setTimeSpent] = useState(TIME_SPENT_OPTIONS[0].minutes);
 
   const todays = db.logs
     .filter((l) => l.broker === broker && l.date === todayISO())
@@ -132,7 +133,7 @@ function LogTab({
       await mutate("clients", (arr) => [...arr, newClient]);
       clientId = newClient.id;
     }
-    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim() }]);
+    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent }]);
     setNewClientName(""); setNotes("");
     showToast("Logged");
   }
@@ -175,6 +176,12 @@ function LogTab({
           </div>
         </div>
         <div className="field">
+          <label>Time spent</label>
+          <select value={timeSpent} onChange={(e) => setTimeSpent(Number(e.target.value))}>
+            {TIME_SPENT_OPTIONS.map((t) => <option key={t.minutes} value={t.minutes}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
           <label>Notes (optional)</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. waiting on income docs" />
         </div>
@@ -184,13 +191,14 @@ function LogTab({
         <div className="section-title"><h3>Today&apos;s activity</h3><span className="muted">{todays.length} logged</span></div>
         {todays.length ? (
           <table>
-            <thead><tr><th>Client</th><th>Type</th><th>Outcome</th><th>Notes</th><th></th></tr></thead>
+            <thead><tr><th>Client</th><th>Type</th><th>Outcome</th><th>Time</th><th>Notes</th><th></th></tr></thead>
             <tbody>
               {todays.map((l) => (
                 <tr key={l.id}>
                   <td>{clientName(l.clientId)}</td>
                   <td><span className="pill">{l.type}</span></td>
                   <td>{l.outcome}</td>
+                  <td className="muted">{l.timeSpentMinutes} min</td>
                   <td className="muted">{l.notes || "—"}</td>
                   <td><button className="x-link" onClick={() => del(l.id)}>Delete</button></td>
                 </tr>
@@ -221,7 +229,9 @@ function DealRow({
     await mutate("deals", (arr) => arr.map((d) => d.id === deal.id ? { ...d, docStatus: docStatus as DocStatus } : d));
   }
   async function toggleEsc(checked: boolean) {
-    await mutate("deals", (arr) => arr.map((d) => d.id === deal.id ? { ...d, escalation: checked, escalatedAt: checked ? (d.escalatedAt || todayISO()) : null } : d));
+    await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
+      ? { ...d, escalation: checked, escalatedAt: checked ? (d.escalatedAt || todayISO()) : null, opsResponse: checked && !d.escalatedAt ? "" : d.opsResponse }
+      : d));
   }
   async function saveReason() {
     await mutate("deals", (arr) => arr.map((d) => d.id === deal.id ? { ...d, escalationReason: reasonDraft } : d));
@@ -292,7 +302,8 @@ function NewDealModal({
     const deal = {
       id: uid(), clientId, broker, value: Number(value) || 0,
       stage, stageEnteredDate: todayISO(), docStatus: "None" as const,
-      escalation: false, escalationReason: "", escalatedAt: null, createdAt: todayISO(),
+      escalation: false, escalationReason: "", escalatedAt: null,
+      opsResponse: "", escalationHistory: [], createdAt: todayISO(),
     };
     await mutate("deals", (arr) => [...arr, deal]);
     showToast("Deal added");

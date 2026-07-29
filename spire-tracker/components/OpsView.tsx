@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
 import { TrackerDB } from "@/lib/types";
-import { ACTIVE_STAGES, BOTTLENECK_DAYS } from "@/lib/constants";
-import { todayISO, daysBetween, weekRange, inRange } from "@/lib/utils";
+import { ACTIVE_STAGES, BOTTLENECK_DAYS, CONTACT_TYPES } from "@/lib/constants";
+import { todayISO, daysBetween, weekRange, inRange, uid } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import type { Mutate } from "@/app/page";
@@ -34,7 +34,7 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
       </div>
       {tab === "overview" && <Overview db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
       {tab === "deals" && <AllDeals db={db} clientName={clientName} />}
-      {tab === "escalations" && <Escalations db={db} clientName={clientName} />}
+      {tab === "escalations" && <Escalations db={db} mutate={mutate} clientName={clientName} />}
       {tab === "report" && <Report db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
       {tab === "brokers" && <ManageBrokers db={db} mutate={mutate} />}
     </>
@@ -64,6 +64,17 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
   const maxTouches = Math.max(1, ...touchCounts);
   const maxDeals = Math.max(1, ...dealCounts);
 
+  const weekLogs = db.logs.filter((l) => inRange(l.date, wr.start, wr.end));
+  const totalMinutes = weekLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
+  const minutesByBroker = db.brokers.map((b) => weekLogs.filter((l) => l.broker === b).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0));
+  const maxMinutesByBroker = Math.max(1, ...minutesByBroker);
+  const minutesByType = CONTACT_TYPES.map((t) => ({
+    type: t,
+    minutes: weekLogs.filter((l) => l.type === t).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0),
+  }));
+  const maxMinutesByType = Math.max(1, ...minutesByType.map((t) => t.minutes));
+  const fmtHrs = (mins: number) => (mins / 60).toFixed(1);
+
   return (
     <>
       <WeekNav weekOffset={weekOffset} setWeekOffset={setWeekOffset} label={wr.label} />
@@ -72,6 +83,9 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
         <div className="stat alt2"><div className="n">{totalTouches}</div><div className="l">Team touches this week</div></div>
         <div className="stat" style={{ background: bottlenecks ? "var(--danger)" : "var(--charcoal)" }}><div className="n">{bottlenecks}</div><div className="l">Stuck &gt;{BOTTLENECK_DAYS}d</div></div>
         <div className="stat alt"><div className="n">{totalEsc}</div><div className="l">Active escalations</div></div>
+      </div>
+      <div className="statgrid" style={{ gridTemplateColumns: "1fr" }}>
+        <div className="stat alt2"><div className="n">{fmtHrs(totalMinutes)} hrs</div><div className="l">Total time logged this week, team-wide</div></div>
       </div>
       <div className="card">
         <h3 style={{ marginBottom: 14 }}>Contact volume by broker</h3>
@@ -99,6 +113,26 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
             </div>
           );
         }) : <div className="empty">No brokers yet.</div>}
+      </div>
+      <div className="card">
+        <h3 style={{ marginBottom: 14 }}>Time logged by broker</h3>
+        {db.brokers.length ? db.brokers.map((b, i) => (
+          <div className="barrow" key={b}>
+            <div className="label">{b}</div>
+            <div className="track"><div className="fill" style={{ width: `${(minutesByBroker[i] / maxMinutesByBroker) * 100}%` }} /></div>
+            <div className="val">{fmtHrs(minutesByBroker[i])} hrs</div>
+          </div>
+        )) : <div className="empty">No brokers yet.</div>}
+      </div>
+      <div className="card">
+        <h3 style={{ marginBottom: 14 }}>Time by activity type, team-wide</h3>
+        {minutesByType.filter((t) => t.minutes > 0).length ? minutesByType.map((t) => (
+          <div className="barrow" key={t.type}>
+            <div className="label">{t.type}</div>
+            <div className="track"><div className="fill" style={{ width: `${(t.minutes / maxMinutesByType) * 100}%`, background: "var(--greyblue)" }} /></div>
+            <div className="val">{fmtHrs(t.minutes)} hrs</div>
+          </div>
+        )) : <div className="empty">No time logged yet this week.</div>}
       </div>
       <div className="card">
         <h3 style={{ marginBottom: 6 }}>Team pipeline funnel</h3>
@@ -146,31 +180,111 @@ function AllDeals({ db, clientName }: { db: TrackerDB; clientName: (id: string) 
   );
 }
 
-function Escalations({ db, clientName }: { db: TrackerDB; clientName: (id: string) => string }) {
+function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate; clientName: (id: string) => string }) {
   const escs = db.deals.filter((d) => d.escalation).slice().sort((a, b) => (a.escalatedAt || "").localeCompare(b.escalatedAt || ""));
+
+  const resolved = db.deals
+    .flatMap((d) => (d.escalationHistory || []).map((r) => ({ ...r, broker: d.broker, clientId: d.clientId })))
+    .sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
+  const avgResolutionDays = resolved.length
+    ? (resolved.reduce((sum, r) => sum + daysBetween(r.escalatedAt, r.resolvedAt), 0) / resolved.length).toFixed(1)
+    : null;
+
+  async function resolve(dealId: string) {
+    await mutate("deals", (arr) => arr.map((d) => {
+      if (d.id !== dealId) return d;
+      const record = {
+        id: uid(),
+        reason: d.escalationReason,
+        opsResponse: d.opsResponse,
+        escalatedAt: d.escalatedAt || todayISO(),
+        resolvedAt: todayISO(),
+      };
+      return {
+        ...d,
+        escalation: false,
+        escalationReason: "",
+        escalatedAt: null,
+        opsResponse: "",
+        escalationHistory: [...(d.escalationHistory || []), record],
+      };
+    }));
+    showToast("Escalation marked resolved");
+  }
+
+  async function saveResponse(dealId: string, text: string) {
+    await mutate("deals", (arr) => arr.map((d) => d.id === dealId ? { ...d, opsResponse: text } : d));
+  }
+
   return (
-    <div className="card">
-      <div className="section-title"><h3>Escalations</h3><span className="muted">{escs.length} flagged, oldest first</span></div>
-      {escs.length ? (
-        <table>
-          <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Flagged</th><th>Reason / needed</th></tr></thead>
-          <tbody>
-            {escs.map((d) => {
-              const flaggedDays = d.escalatedAt ? daysBetween(d.escalatedAt, todayISO()) : 0;
-              return (
-                <tr key={d.id}>
-                  <td>{d.broker}</td>
-                  <td><b>{clientName(d.clientId)}</b></td>
-                  <td><span className="pill">{d.stage}</span></td>
-                  <td><span className={`pill ${flaggedDays > 3 ? "bad" : "warn"}`}>{flaggedDays}d flagged</span></td>
-                  <td>{d.escalationReason || "No reason given"}</td>
+    <>
+      <div className="card">
+        <div className="section-title"><h3>Open escalations</h3><span className="muted">{escs.length} flagged, oldest first</span></div>
+        {escs.length ? (
+          <table>
+            <thead><tr><th>Broker</th><th>Client</th><th>Stage</th><th>Flagged</th><th>Reason / needed</th><th>Your response</th><th></th></tr></thead>
+            <tbody>
+              {escs.map((d) => {
+                const flaggedDays = d.escalatedAt ? daysBetween(d.escalatedAt, todayISO()) : 0;
+                return <EscalationRow key={d.id} deal={d} flaggedDays={flaggedDays} clientName={clientName} onSaveResponse={saveResponse} onResolve={resolve} />;
+              })}
+            </tbody>
+          </table>
+        ) : <div className="empty">No open escalations. 🎉</div>}
+      </div>
+      <div className="card">
+        <div className="section-title">
+          <h3>Recently resolved</h3>
+          <span className="muted">{avgResolutionDays !== null ? `Avg resolution time: ${avgResolutionDays}d` : "No resolutions yet"}</span>
+        </div>
+        {resolved.length ? (
+          <table>
+            <thead><tr><th>Broker</th><th>Client</th><th>Reason</th><th>Response</th><th>Escalated</th><th>Resolved</th><th>Time to resolve</th></tr></thead>
+            <tbody>
+              {resolved.slice(0, 25).map((r) => (
+                <tr key={r.id}>
+                  <td>{r.broker}</td>
+                  <td>{clientName(r.clientId)}</td>
+                  <td className="muted">{r.reason || "—"}</td>
+                  <td className="muted">{r.opsResponse || "—"}</td>
+                  <td>{r.escalatedAt}</td>
+                  <td>{r.resolvedAt}</td>
+                  <td><span className="pill ok">{daysBetween(r.escalatedAt, r.resolvedAt)}d</span></td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      ) : <div className="empty">No open escalations. 🎉</div>}
-    </div>
+              ))}
+            </tbody>
+          </table>
+        ) : <div className="empty">Resolved escalations will show up here, with how long each one took.</div>}
+      </div>
+    </>
+  );
+}
+
+function EscalationRow({
+  deal, flaggedDays, clientName, onSaveResponse, onResolve,
+}: {
+  deal: TrackerDB["deals"][number]; flaggedDays: number; clientName: (id: string) => string;
+  onSaveResponse: (dealId: string, text: string) => void; onResolve: (dealId: string) => void;
+}) {
+  const [response, setResponse] = useState(deal.opsResponse || "");
+  return (
+    <tr>
+      <td>{deal.broker}</td>
+      <td><b>{clientName(deal.clientId)}</b></td>
+      <td><span className="pill">{deal.stage}</span></td>
+      <td><span className={`pill ${flaggedDays > 3 ? "bad" : "warn"}`}>{flaggedDays}d flagged</span></td>
+      <td className="muted">{deal.escalationReason || "No reason given"}</td>
+      <td>
+        <input
+          type="text"
+          placeholder="Type your response…"
+          value={response}
+          onChange={(e) => setResponse(e.target.value)}
+          onBlur={() => onSaveResponse(deal.id, response)}
+        />
+      </td>
+      <td><button className="btn small" onClick={() => onResolve(deal.id)}>Mark Resolved</button></td>
+    </tr>
   );
 }
 
@@ -180,18 +294,20 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
     const touches = db.logs.filter((l) => l.broker === b && inRange(l.date, wr.start, wr.end));
     const open = db.deals.filter((d) => d.broker === b && ACTIVE_STAGES.includes(d.stage));
     const cap = db.capacity.find((c) => c.broker === b && c.weekStart === wr.start);
+    const minutes = touches.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
     return {
       broker: b, touches: touches.length, openDeals: open.length,
       bottlenecks: open.filter((d) => daysBetween(d.stageEnteredDate, todayISO()) > BOTTLENECK_DAYS).length,
       escalations: open.filter((d) => d.escalation).length,
+      hoursLogged: (minutes / 60).toFixed(1),
       capStatus: cap?.status ?? "—", capCalls: cap?.callsCapacity ?? "—", capDeals: cap?.dealsCapacity ?? "—",
     };
   });
 
   function exportCsv() {
-    let csv = `Broker,Touches,Open Deals,Stuck>${BOTTLENECK_DAYS}d,Escalations,Self-Reported Load,Next Wk Calls Capacity,Next Wk Deals Capacity\n`;
+    let csv = `Broker,Touches,Hours Logged,Open Deals,Stuck>${BOTTLENECK_DAYS}d,Escalations,Self-Reported Load,Next Wk Calls Capacity,Next Wk Deals Capacity\n`;
     rows.forEach((r) => {
-      csv += [r.broker, r.touches, r.openDeals, r.bottlenecks, r.escalations, r.capStatus, r.capCalls, r.capDeals].join(",") + "\n";
+      csv += [r.broker, r.touches, r.hoursLogged, r.openDeals, r.bottlenecks, r.escalations, r.capStatus, r.capCalls, r.capDeals].join(",") + "\n";
     });
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -214,7 +330,7 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
           <table>
             <thead>
               <tr>
-                <th>Broker</th><th>Touches</th><th>Open deals</th><th>Stuck &gt;{BOTTLENECK_DAYS}d</th><th>Escalations</th><th>Self-reported load</th><th>Next wk capacity (calls/deals)</th>
+                <th>Broker</th><th>Touches</th><th>Hours Logged</th><th>Open deals</th><th>Stuck &gt;{BOTTLENECK_DAYS}d</th><th>Escalations</th><th>Self-reported load</th><th>Next wk capacity (calls/deals)</th>
               </tr>
             </thead>
             <tbody>
@@ -222,6 +338,7 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
                 <tr key={r.broker}>
                   <td><b>{r.broker}</b></td>
                   <td>{r.touches}</td>
+                  <td>{r.hoursLogged}</td>
                   <td>{r.openDeals}</td>
                   <td>{r.bottlenecks}</td>
                   <td>{r.escalations}</td>
