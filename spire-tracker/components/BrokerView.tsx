@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus } from "@/lib/types";
-import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS } from "@/lib/constants";
+import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, RESOLVED_NOTE_VISIBLE_DAYS } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange } from "@/lib/utils";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
@@ -219,6 +219,8 @@ function DealRow({
   const days = daysBetween(deal.stageEnteredDate, todayISO());
   const cls = days > BOTTLENECK_DAYS ? "bad" : days >= BOTTLENECK_DAYS - 3 ? "warn" : "ok";
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
+  const lastResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0];
+  const recentResolution = lastResolution && daysBetween(lastResolution.resolvedAt, todayISO()) <= RESOLVED_NOTE_VISIBLE_DAYS ? lastResolution : null;
 
   async function updateStage(stage: string) {
     if (stage === deal.stage) return;
@@ -275,6 +277,21 @@ function DealRow({
               onBlur={saveReason}
               style={{ border: "1px solid var(--danger)" }}
             />
+            {deal.opsResponse ? (
+              <div className="muted" style={{ marginTop: 6 }}>
+                <b style={{ color: "var(--charcoal)" }}>Ops response:</b> {deal.opsResponse}
+              </div>
+            ) : (
+              <div className="muted" style={{ marginTop: 6 }}>Waiting on a response from your ops manager.</div>
+            )}
+          </td>
+        </tr>
+      )}
+      {!deal.escalation && recentResolution && (
+        <tr>
+          <td colSpan={7} style={{ borderBottom: "1px solid var(--warmgrey)", background: "#eef4ef" }}>
+            <span className="pill ok">Resolved {daysBetween(recentResolution.resolvedAt, todayISO())}d ago</span>
+            {recentResolution.opsResponse ? <span style={{ marginLeft: 8 }}>{recentResolution.opsResponse}</span> : null}
           </td>
         </tr>
       )}
