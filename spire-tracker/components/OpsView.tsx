@@ -3,6 +3,7 @@ import { useState } from "react";
 import { TrackerDB } from "@/lib/types";
 import { ACTIVE_STAGES, BOTTLENECK_DAYS, CONTACT_TYPES } from "@/lib/constants";
 import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDateTime, totalMinutesForDeal } from "@/lib/utils";
+import { notifyResponse } from "@/lib/api";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import TimeEntriesModal from "./TimeEntriesModal";
@@ -262,6 +263,7 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
     : null;
 
   async function resolve(dealId: string) {
+    const d = db.deals.find((x) => x.id === dealId);
     await mutate("deals", (arr) => arr.map((d) => {
       if (d.id !== dealId) return d;
       const record = {
@@ -276,15 +278,42 @@ function Escalations({ db, mutate, clientName }: { db: TrackerDB; mutate: Mutate
         escalation: false,
         escalationReason: "",
         escalatedAt: null,
+        escalationNotifiedAt: null,
         opsResponse: "",
         escalationHistory: [...(d.escalationHistory || []), record],
       };
     }));
-    showToast("Escalation marked resolved");
+    if (d) {
+      notifyResponse({
+        broker: d.broker,
+        clientName: clientName(d.clientId),
+        stage: d.stage,
+        reason: d.escalationReason,
+        opsResponse: d.opsResponse,
+        kind: "resolved",
+      });
+    }
+    showToast("Resolved — broker notified by email");
   }
 
+  // Saving a response on blur automatically emails the broker — but only when
+  // the text is new (differs from what was last saved), so tabbing out without
+  // changing anything won't fire a duplicate email.
   async function saveResponse(dealId: string, text: string) {
-    await mutate("deals", (arr) => arr.map((d) => d.id === dealId ? { ...d, opsResponse: text } : d));
+    const d = db.deals.find((x) => x.id === dealId);
+    const isNew = Boolean(d && text.trim() && text !== (d.opsResponse || ""));
+    await mutate("deals", (arr) => arr.map((x) => x.id === dealId ? { ...x, opsResponse: text } : x));
+    if (d && isNew) {
+      notifyResponse({
+        broker: d.broker,
+        clientName: clientName(d.clientId),
+        stage: d.stage,
+        reason: d.escalationReason,
+        opsResponse: text,
+        kind: "response",
+      });
+      showToast("Broker notified of your response");
+    }
   }
 
   return (
@@ -352,7 +381,8 @@ function EscalationRow({
   deal, flaggedMinutes, clientName, onSaveResponse, onResolve,
 }: {
   deal: TrackerDB["deals"][number]; flaggedMinutes: number; clientName: (id: string) => string;
-  onSaveResponse: (dealId: string, text: string) => void; onResolve: (dealId: string) => void;
+  onSaveResponse: (dealId: string, text: string) => void;
+  onResolve: (dealId: string) => void;
 }) {
   const [response, setResponse] = useState(deal.opsResponse || "");
   return (
@@ -365,13 +395,13 @@ function EscalationRow({
       <td>
         <input
           type="text"
-          placeholder="Type your response…"
+          placeholder="Type your response — broker is emailed automatically…"
           value={response}
           onChange={(e) => setResponse(e.target.value)}
           onBlur={() => onSaveResponse(deal.id, response)}
         />
       </td>
-      <td><button className="btn small" onClick={() => onResolve(deal.id)}>Mark Resolved</button></td>
+      <td style={{ textAlign: "right" }}><button className="btn small" onClick={() => onResolve(deal.id)}>Mark Resolved</button></td>
     </tr>
   );
 }
@@ -493,47 +523,134 @@ function Report({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: 
 
 function ManageBrokers({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [opsEmail, setOpsEmail] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const sortedBrokers = sortRows(db.brokers, "name", sortDir, (b) => b);
   const handleSort = (_key: string) => setSortDir(sortDir === "asc" ? "desc" : "asc");
 
+  const emailFor = (b: string) => db.brokerContacts.find((c) => c.name === b)?.email ?? "";
+
   async function add() {
     const trimmed = name.trim();
+    const mail = email.trim();
     if (!trimmed) { showToast("Enter a name"); return; }
     if (db.brokers.includes(trimmed)) { showToast("Already on the team"); return; }
+    if (mail && !isEmail(mail)) { showToast("That email doesn't look right"); return; }
     await mutate("brokers", (arr) => [...arr, trimmed]);
-    setName("");
+    if (mail) {
+      await mutate("brokerContacts", (arr) => [...arr.filter((c) => c.name !== trimmed), { name: trimmed, email: mail }]);
+    }
+    setName(""); setEmail("");
     showToast("Broker added");
   }
   async function remove(b: string) {
     await mutate("brokers", (arr) => arr.filter((n) => n !== b));
+    await mutate("brokerContacts", (arr) => arr.filter((c) => c.name !== b));
+  }
+  async function saveEmail(b: string, value: string) {
+    const mail = value.trim();
+    if (mail && !isEmail(mail)) { showToast("That email doesn't look right"); return; }
+    await mutate("brokerContacts", (arr) => {
+      const rest = arr.filter((c) => c.name !== b);
+      return mail ? [...rest, { name: b, email: mail }] : rest;
+    });
+  }
+
+  async function addOpsEmail() {
+    const mail = opsEmail.trim();
+    if (!mail) { showToast("Enter an email"); return; }
+    if (!isEmail(mail)) { showToast("That email doesn't look right"); return; }
+    if (db.opsRecipients.some((e) => e.toLowerCase() === mail.toLowerCase())) { showToast("Already on the list"); return; }
+    await mutate("opsRecipients", (arr) => [...arr, mail]);
+    setOpsEmail("");
+    showToast("Ops recipient added");
+  }
+  async function removeOpsEmail(mail: string) {
+    await mutate("opsRecipients", (arr) => arr.filter((e) => e !== mail));
   }
 
   return (
     <>
       <div className="card">
-        <h3 style={{ marginBottom: 14 }}>Add a broker</h3>
+        <h3 style={{ marginBottom: 6 }}>Escalation alert recipients</h3>
+        <p className="muted" style={{ marginTop: 0 }}>These addresses get an email the moment any broker flags a deal for escalation.</p>
         <div style={{ display: "flex", gap: 10 }}>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Broker full name" style={{ flex: 1 }} />
-          <button className="btn" onClick={add}>Add</button>
+          <input type="email" value={opsEmail} onChange={(e) => setOpsEmail(e.target.value)} placeholder="ops@spiremortgage.ca" style={{ flex: 1 }} onKeyDown={(e) => { if (e.key === "Enter") addOpsEmail(); }} />
+          <button className="btn" onClick={addOpsEmail}>Add</button>
         </div>
+        {db.opsRecipients.length ? (
+          <table style={{ marginTop: 14 }}>
+            <tbody>
+              {db.opsRecipients.map((e) => (
+                <tr key={e}><td>{e}</td><td style={{ textAlign: "right" }}><button className="x-link" onClick={() => removeOpsEmail(e)}>Remove</button></td></tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <div className="empty" style={{ padding: "18px 0" }}>No recipients yet — add at least one so escalations get noticed.</div>}
       </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 6 }}>Add a broker</h3>
+        <p className="muted" style={{ marginTop: 0 }}>The email is where this broker gets notified when ops responds to their escalations.</p>
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Full name</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Broker full name" />
+          </div>
+          <div className="field">
+            <label>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="broker@spiremortgage.ca" />
+          </div>
+        </div>
+        <button className="btn" onClick={add}>Add broker</button>
+      </div>
+
       <div className="card">
         <h3 style={{ marginBottom: 14 }}>Current team ({db.brokers.length})</h3>
         {db.brokers.length ? (
           <div className="table-wrap">
           <table>
-            <thead><tr><SortableTh label="Name" sortKey="name" currentKey="name" currentDir={sortDir} onSort={handleSort} /><th></th></tr></thead>
+            <thead><tr>
+              <SortableTh label="Name" sortKey="name" currentKey="name" currentDir={sortDir} onSort={handleSort} />
+              <th>Email (for notifications)</th>
+              <th></th>
+            </tr></thead>
             <tbody>
               {sortedBrokers.map((b) => (
-                <tr key={b}><td>{b}</td><td><button className="x-link" onClick={() => remove(b)}>Remove</button></td></tr>
+                <BrokerRow key={b} name={b} email={emailFor(b)} onSaveEmail={saveEmail} onRemove={remove} />
               ))}
             </tbody>
           </table>
           </div>
         ) : <div className="empty">No brokers added yet.</div>}
-        <p className="muted" style={{ marginTop: 10 }}>Removing a broker only hides them from the check-in screen — their past logs, deals, and history stay in the data.</p>
+        <p className="muted" style={{ marginTop: 10 }}>A broker with no email simply won&apos;t receive notifications. Removing a broker only hides them from the check-in screen — their past logs, deals, and history stay in the data.</p>
       </div>
     </>
   );
+}
+
+function BrokerRow({
+  name, email, onSaveEmail, onRemove,
+}: { name: string; email: string; onSaveEmail: (b: string, v: string) => void; onRemove: (b: string) => void }) {
+  const [draft, setDraft] = useState(email);
+  return (
+    <tr>
+      <td><b>{name}</b></td>
+      <td>
+        <input
+          type="email"
+          value={draft}
+          placeholder="add email…"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => { if (draft.trim() !== email) onSaveEmail(name, draft); }}
+        />
+      </td>
+      <td style={{ textAlign: "right" }}><button className="x-link" onClick={() => onRemove(name)}>Remove</button></td>
+    </tr>
+  );
+}
+
+function isEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }

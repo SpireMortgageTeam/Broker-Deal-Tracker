@@ -77,6 +77,38 @@ export const BOTTLENECK_DAYS = 7; // change this number
 ```
 Commit and push — Vercel redeploys automatically.
 
+## Escalation email notifications (Resend)
+
+When a broker flags a deal and clicks **Notify Ops**, everyone on the escalation
+recipient list gets an email. When Ops sends a response or marks it resolved, the
+broker who raised it gets an email back. Because login is a shared team password
+(no per-user accounts), notifications are routed by the **broker name** → email
+mapping you set in the app.
+
+Setup is two parts — configure the app, and add the email credentials.
+
+**A. In the app (Ops Manager → Manage Brokers):**
+
+1. Under **Escalation alert recipients**, add the address(es) that should hear about new escalations (e.g. the ops manager's email).
+2. For each broker, fill in their **Email** — that's where their "Ops responded / resolved" notices go. A broker with no email simply gets skipped.
+
+**B. Add the email service (Resend):**
+
+1. Create a free account at https://resend.com.
+2. **Verify your domain** (Resend → Domains → Add) so mail can send from `@spiremortgage.ca`. This means adding a few DNS records (SPF/DKIM) wherever your domain is managed — Resend shows the exact records. Verification improves deliverability.
+3. Create an **API key** (Resend → API Keys).
+4. Add these environment variables — locally in `.env.local`, and in Vercel under **Settings → Environment Variables** (Production + Preview):
+
+   | Name | Value |
+   |---|---|
+   | `RESEND_API_KEY` | the API key from Resend |
+   | `EMAIL_FROM` | e.g. `Spire Pipeline Tracker <alerts@spiremortgage.ca>` (must be on the verified domain) |
+   | `APP_URL` | `https://broker-deal-tracker.vercel.app` (used for links in the emails) |
+
+5. Redeploy. Until `RESEND_API_KEY` and `EMAIL_FROM` are set, the app runs normally but silently skips sending — nothing breaks.
+
+> Testing tip: before verifying a domain, Resend lets you send from `onboarding@resend.dev`, but only to the email you signed up with. Fine for a first test; verify the domain before rolling out to the team.
+
 ## A note on the login model
 
 Everyone shares one password to get into the app, then picks their own name from a

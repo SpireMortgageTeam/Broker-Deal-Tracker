@@ -69,4 +69,6 @@ export const KV_KEYS = {
   logs: "data:contactlog",
   deals: "data:deals",
   capacity: "data:capacity",
+  brokerContacts: "data:brokercontacts",
+  opsRecipients: "data:opsrecipients",
 } as const;
