@@ -109,6 +109,27 @@ Setup is two parts — configure the app, and add the email credentials.
 
 > Testing tip: before verifying a domain, Resend lets you send from `onboarding@resend.dev`, but only to the email you signed up with. Fine for a first test; verify the domain before rolling out to the team.
 
+## Data safety: concurrent editing + backups
+
+The tracker is built for the whole team to use at the same time. Each change
+saves only the single record it touched (an atomic per-record write to Redis),
+so two people editing at once can never overwrite each other's work — a stale
+browser tab can no longer wipe shared data.
+
+Backups are handled three ways, all under **Ops Manager → Data & Backups**:
+
+- **Automatic snapshots** — a full snapshot of everything is saved roughly once
+  an hour while the tracker is in use; the last ~72 are kept. Restore any of them
+  with one click (restoring replaces all current data with that snapshot).
+- **Download backup** — export the entire dataset to a `.json` file on your
+  computer anytime. Do this before any big change.
+- **Restore from a file** — upload a previously downloaded backup to roll back.
+
+Under the hood, collections are stored per-record: hashes for `clients`, `logs`,
+`deals`, `capacity`, `brokerContacts`, and sets for `brokers`/`opsRecipients`.
+On first load after this update, existing data is migrated automatically from the
+old single-array keys (one time, guarded by a flag).
+
 ## A note on the login model
 
 Everyone shares one password to get into the app, then picks their own name from a

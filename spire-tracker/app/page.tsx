@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { TrackerDB, Role } from "@/lib/types";
-import { KV_KEYS } from "@/lib/constants";
-import { loadArr, saveArr, logout } from "@/lib/api";
+import { CollectionKey } from "@/lib/collections";
+import { loadAll, persistDiff, logout } from "@/lib/api";
 import RoleScreen from "@/components/RoleScreen";
 import BrokerView from "@/components/BrokerView";
 import OpsView from "@/components/OpsView";
@@ -23,26 +23,31 @@ export default function Page() {
 
   useEffect(() => {
     (async () => {
-      const [brokers, clients, logs, deals, capacity, brokerContacts, opsRecipients] = await Promise.all([
-        loadArr<string>(KV_KEYS.brokers),
-        loadArr(KV_KEYS.clients),
-        loadArr(KV_KEYS.logs),
-        loadArr(KV_KEYS.deals),
-        loadArr(KV_KEYS.capacity),
-        loadArr(KV_KEYS.brokerContacts),
-        loadArr<string>(KV_KEYS.opsRecipients),
-      ]);
-      setDb({ brokers, clients, logs, deals, capacity, brokerContacts, opsRecipients } as TrackerDB);
+      try {
+        const all = await loadAll();
+        setDb({
+          brokers: all.brokers || [],
+          clients: all.clients || [],
+          logs: all.logs || [],
+          deals: all.deals || [],
+          capacity: all.capacity || [],
+          brokerContacts: all.brokerContacts || [],
+          opsRecipients: all.opsRecipients || [],
+        } as TrackerDB);
+      } catch {
+        /* leave EMPTY_DB; user sees an empty state rather than a crash */
+      }
       setLoading(false);
     })();
   }, []);
 
   const mutate: Mutate = useCallback(async (key, updater) => {
     setDb((prev) => {
-      const next = { ...prev, [key]: updater(prev[key]) };
-      const kvKey = KV_KEYS[key as keyof typeof KV_KEYS];
-      saveArr(kvKey, next[key] as any); // fire and forget; UI already reflects the update optimistically
-      return next;
+      const before = prev[key] as any[];
+      const after = updater(prev[key]) as any[];
+      // Persist only the changed record(s), not the whole collection.
+      persistDiff(key as CollectionKey, before, after);
+      return { ...prev, [key]: after };
     });
   }, []);
 

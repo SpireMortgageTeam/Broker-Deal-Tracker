@@ -3,14 +3,15 @@ import { useState } from "react";
 import { TrackerDB } from "@/lib/types";
 import { ACTIVE_STAGES, BOTTLENECK_DAYS, CONTACT_TYPES } from "@/lib/constants";
 import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDateTime, totalMinutesForDeal } from "@/lib/utils";
-import { notifyResponse } from "@/lib/api";
+import { notifyResponse, listBackups, restoreBackup } from "@/lib/api";
+import { useEffect } from "react";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import TimeEntriesModal from "./TimeEntriesModal";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
-type Tab = "overview" | "deals" | "escalations" | "report" | "brokers";
+type Tab = "overview" | "deals" | "escalations" | "report" | "brokers" | "backups";
 
 export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -22,6 +23,7 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
     ["escalations", "Escalations"],
     ["report", "Weekly Report"],
     ["brokers", "Manage Brokers"],
+    ["backups", "Data & Backups"],
   ];
 
   function clientName(id: string) {
@@ -40,6 +42,100 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
       {tab === "escalations" && <Escalations db={db} mutate={mutate} clientName={clientName} />}
       {tab === "report" && <Report db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
       {tab === "brokers" && <ManageBrokers db={db} mutate={mutate} />}
+      {tab === "backups" && <BackupsPanel db={db} />}
+    </>
+  );
+}
+
+function BackupsPanel({ db }: { db: TrackerDB }) {
+  const [snapshots, setSnapshots] = useState<number[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    listBackups().then(setSnapshots);
+  }, []);
+
+  function downloadExport() {
+    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `spire-tracker-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast("Backup downloaded");
+  }
+
+  async function restoreTs(ts: number) {
+    if (!confirm("Restore this snapshot? It replaces ALL current data with the backup. This can't be undone.")) return;
+    setBusy(true);
+    const ok = await restoreBackup({ ts });
+    setBusy(false);
+    if (ok) { showToast("Restored — reloading…"); setTimeout(() => window.location.reload(), 800); }
+    else showToast("Restore failed");
+  }
+
+  async function importFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!confirm(`Restore from "${file.name}"? It replaces ALL current data with the file's contents.`)) return;
+    try {
+      const data = JSON.parse(await file.text());
+      setBusy(true);
+      const ok = await restoreBackup({ data });
+      setBusy(false);
+      if (ok) { showToast("Restored — reloading…"); setTimeout(() => window.location.reload(), 800); }
+      else showToast("Restore failed");
+    } catch {
+      showToast("That file isn't a valid backup");
+    }
+  }
+
+  const totals = `${db.deals.length} deals · ${db.clients.length} clients · ${db.logs.length} activity entries`;
+
+  return (
+    <>
+      <div className="card">
+        <h3 style={{ marginBottom: 6 }}>Download a backup</h3>
+        <p className="muted" style={{ marginTop: 0 }}>Saves everything currently in the tracker ({totals}) to a file on your computer. Do this before any big change.</p>
+        <button className="btn" onClick={downloadExport}>Download backup (.json)</button>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 6 }}>Automatic snapshots</h3>
+        <p className="muted" style={{ marginTop: 0 }}>The tracker saves a full snapshot automatically about once an hour while it&apos;s in use. Restoring replaces all current data with that snapshot.</p>
+        {snapshots === null ? (
+          <div className="empty">Loading…</div>
+        ) : snapshots.length ? (
+          <table>
+            <thead><tr><th>Snapshot taken</th><th></th></tr></thead>
+            <tbody>
+              {snapshots.map((ts) => (
+                <tr key={ts}>
+                  <td>{new Date(ts).toLocaleString()}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <button className="btn secondary small" disabled={busy} onClick={() => restoreTs(ts)}>Restore</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="empty">No automatic snapshots yet — the first one is taken within an hour of activity.</div>
+        )}
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 6 }}>Restore from a file</h3>
+        <p className="muted" style={{ marginTop: 0 }}>Upload a backup file you downloaded earlier. This replaces all current data.</p>
+        <label className="btn secondary" style={{ display: "inline-block", cursor: "pointer" }}>
+          Choose backup file…
+          <input type="file" accept="application/json,.json" style={{ display: "none" }} onChange={importFile} disabled={busy} />
+        </label>
+      </div>
     </>
   );
 }
