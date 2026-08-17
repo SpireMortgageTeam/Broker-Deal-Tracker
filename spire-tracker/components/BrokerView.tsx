@@ -271,8 +271,9 @@ function LogTab({
   db: TrackerDB; mutate: Mutate; broker: string;
   myClients: TrackerDB["clients"]; clientName: (id: string) => string;
 }) {
-  const [clientSel, setClientSel] = useState("__new__");
-  const [newClientName, setNewClientName] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const [newClientSource, setNewClientSource] = useState<ClientSource>(CLIENT_SOURCES[0]);
   const [dealSel, setDealSel] = useState("__none__");
   const [type, setType] = useState(CONTACT_TYPES[0]);
@@ -280,7 +281,10 @@ function LogTab({
   const [notes, setNotes] = useState("");
   const [timeSpent, setTimeSpent] = useState(TIME_SPENT_OPTIONS[0].minutes);
 
-  const clientDeals = db.deals.filter((d) => d.clientId === clientSel && d.broker === broker);
+  const q = query.trim().toLowerCase();
+  const matches = q ? myClients.filter((c) => c.name.toLowerCase().includes(q)) : myClients;
+  const exactMatch = myClients.find((c) => c.name.trim().toLowerCase() === q);
+  const clientDeals = selectedId ? db.deals.filter((d) => d.clientId === selectedId && d.broker === broker) : [];
 
   const todays = db.logs
     .filter((l) => l.broker === broker && l.date === todayISO())
@@ -299,14 +303,14 @@ function LogTab({
 
   async function save() {
     if (!notes.trim()) { showToast("Add a note — every entry needs context"); return; }
-    let clientId = clientSel;
+    let clientId = selectedId;
     let isFollowUp = false;
-    if (clientId === "__new__") {
-      const name = newClientName.trim();
-      if (!name) { showToast("Enter a client name first"); return; }
+    if (!clientId) {
+      const name = query.trim();
+      if (!name) { showToast("Pick a client or type a new name"); return; }
       // A new outreach must be a genuinely new client — no duplicates.
       if (myClients.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) {
-        showToast("That client already exists — pick them from the list to log a follow-up");
+        showToast("That client already exists — select them to log a follow-up");
         return;
       }
       const newClient = { id: uid(), name, broker, createdDate: todayISO(), source: newClientSource };
@@ -314,12 +318,12 @@ function LogTab({
       clientId = newClient.id;
       isFollowUp = false; // brand-new touch point = new origination
     }
-    const dealId = dealSel === "__none__" ? null : dealSel;
+    const dealId = selectedId && dealSel !== "__none__" ? dealSel : null;
     const stageAtLog = dealId ? (db.deals.find((d) => d.id === dealId)?.stage ?? null) : null;
     // Existing client, not tied to a deal => a follow-up on a prior touch point.
-    if (clientSel !== "__new__") isFollowUp = !dealId;
+    if (selectedId) isFollowUp = !dealId;
     await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent, dealId, stageAtLog, isFollowUp }]);
-    setNewClientName(""); setNotes(""); setDealSel("__none__");
+    setQuery(""); setSelectedId(null); setNotes(""); setDealSel("__none__"); setOpen(false);
     showToast(dealId ? "Time logged on deal" : isFollowUp ? "Follow-up logged" : "New outreach logged");
   }
 
@@ -333,20 +337,35 @@ function LogTab({
       <div className="card">
         <h3 style={{ marginBottom: 14 }}>Log a contact</h3>
         <div className="grid grid-2">
-          <div className="field">
-            <label>Client</label>
-            <select value={clientSel} onChange={(e) => { setClientSel(e.target.value); setDealSel("__none__"); }}>
-              <option value="__new__">+ New outreach (new client)…</option>
-              {myClients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+          <div className="field" style={{ position: "relative" }}>
+            <label>Client — type to find an existing one</label>
+            <input
+              type="text"
+              value={query}
+              placeholder="Start typing a name…"
+              onChange={(e) => { setQuery(e.target.value); setSelectedId(null); setDealSel("__none__"); setOpen(true); }}
+              onFocus={() => setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 150)}
+            />
+            {open && (
+              <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, top: "100%", marginTop: 4, background: "var(--white)", border: "1px solid var(--lbg)", borderRadius: 8, boxShadow: "var(--shadow)", maxHeight: 260, overflowY: "auto" }}>
+                {matches.slice(0, 8).map((c) => (
+                  <div key={c.id} onMouseDown={(e) => { e.preventDefault(); setSelectedId(c.id); setQuery(c.name); setOpen(false); }} style={{ padding: "9px 11px", cursor: "pointer", borderBottom: "1px solid var(--warmgrey)", fontSize: 13.5 }}>
+                    {c.name} <span className="muted" style={{ fontSize: 11 }}>· log a follow-up</span>
+                  </div>
+                ))}
+                {query.trim() && !exactMatch && (
+                  <div onMouseDown={(e) => { e.preventDefault(); setSelectedId(null); setOpen(false); }} style={{ padding: "9px 11px", cursor: "pointer", color: "var(--charcoal)", fontWeight: 600, fontSize: 13.5, background: "var(--bg)" }}>
+                    ➕ New outreach: “{query.trim()}”
+                  </div>
+                )}
+                {!matches.length && !query.trim() && (
+                  <div className="muted" style={{ padding: "9px 11px", fontSize: 13 }}>Start typing a client name…</div>
+                )}
+              </div>
+            )}
           </div>
-          {clientSel === "__new__" && (
-            <div className="field">
-              <label>New client name</label>
-              <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Full name" />
-            </div>
-          )}
-          {clientSel === "__new__" && (
+          {!selectedId && query.trim() && (
             <div className="field">
               <label>Client category</label>
               <select value={newClientSource} onChange={(e) => setNewClientSource(e.target.value as ClientSource)}>
@@ -354,7 +373,7 @@ function LogTab({
               </select>
             </div>
           )}
-          {clientSel !== "__new__" && clientDeals.length > 0 && (
+          {selectedId && clientDeals.length > 0 && (
             <div className="field">
               <label>Which deal is this time for?</label>
               <select value={dealSel} onChange={(e) => setDealSel(e.target.value)}>
@@ -389,11 +408,13 @@ function LogTab({
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What happened / what's needed" />
         </div>
         <p className="muted" style={{ marginTop: -4, fontSize: 12 }}>
-          {clientSel === "__new__"
+          {selectedId
+            ? (dealSel !== "__none__"
+                ? "Logged as time on this deal (active deal)."
+                : "Follow-up → time added onto this existing client, not a new touch.")
+            : query.trim()
             ? "New outreach → counts as a new-origination touch point."
-            : dealSel !== "__none__"
-            ? "Logged as time on this deal (active deal)."
-            : "Follow-up → time added onto this existing client, not a new touch."}
+            : "Pick an existing client to follow up, or type a new name for new outreach."}
         </p>
         <button className="btn" onClick={save}>Save entry</button>
       </div>
