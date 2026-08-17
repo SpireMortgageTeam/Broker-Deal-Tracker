@@ -670,12 +670,16 @@ function NewDealModal({
   const [newClientSource, setNewClientSource] = useState<ClientSource>(CLIENT_SOURCES[0]);
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(ACTIVE_STAGES[0]);
-  const [dealType, setDealType] = useState<DealType>("New origination");
-  const [logNow, setLogNow] = useState(false);
-  const [logTime, setLogTime] = useState(TIME_SPENT_OPTIONS[0].minutes);
+  const [dealType, setDealType] = useState<DealType | "">("");
+  const [logTime, setLogTime] = useState<string>("");
   const [logNotes, setLogNotes] = useState("");
 
   async function save() {
+    // Required, no defaults — so no deal gets entered without context.
+    if (!dealType) { showToast("Choose New origination or Existing pipeline"); return; }
+    if (!logTime) { showToast("Select the time spent"); return; }
+    if (!logNotes.trim()) { showToast("Add a note about this deal"); return; }
+
     let clientId = clientSel;
     if (clientId === "__new__") {
       const name = newClientName.trim();
@@ -692,15 +696,12 @@ function NewDealModal({
       opsResponse: "", escalationHistory: [], createdAt: todayISO(),
     };
     await mutate("deals", (arr) => [...arr, deal]);
-    // Optionally log a first time entry against this deal in the same step.
-    if (logNow) {
-      await mutate("logs", (arr) => [...arr, {
-        id: uid(), clientId, broker, date: todayISO(),
-        type: CONTACT_TYPES[0], outcome: "Other", notes: logNotes.trim(),
-        timeSpentMinutes: logTime, dealId, stageAtLog: stage,
-      }]);
-    }
-    showToast(logNow ? "Deal added and time logged" : "Deal added");
+    await mutate("logs", (arr) => [...arr, {
+      id: uid(), clientId, broker, date: todayISO(),
+      type: CONTACT_TYPES[0], outcome: "Other", notes: logNotes.trim(),
+      timeSpentMinutes: Number(logTime), dealId, stageAtLog: stage,
+    }]);
+    showToast("Deal added and time logged");
     onClose();
   }
 
@@ -735,8 +736,9 @@ function NewDealModal({
             <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
           </div>
           <div className="field">
-            <label>Deal type</label>
+            <label>Deal type *</label>
             <select value={dealType} onChange={(e) => setDealType(e.target.value as DealType)}>
+              <option value="" disabled>Select…</option>
               {DEAL_TYPES.map((t) => <option key={t}>{t}</option>)}
             </select>
           </div>
@@ -747,26 +749,20 @@ function NewDealModal({
             {ACTIVE_STAGES.map((s) => <option key={s}>{s}</option>)}
           </select>
         </div>
-        <div className="field">
-          <label className="checkrow" style={{ textTransform: "none", fontWeight: 600, color: "var(--charcoal)" }}>
-            <input type="checkbox" checked={logNow} onChange={(e) => setLogNow(e.target.checked)} />
-            Log some time on this deal now
-          </label>
-        </div>
-        {logNow && (
-          <div className="grid grid-2">
-            <div className="field">
-              <label>Time spent</label>
-              <select value={logTime} onChange={(e) => setLogTime(Number(e.target.value))}>
-                {TIME_SPENT_OPTIONS.map((t) => <option key={t.minutes} value={t.minutes}>{t.label}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label>Notes</label>
-              <input type="text" value={logNotes} onChange={(e) => setLogNotes(e.target.value)} placeholder="What did this cover?" />
-            </div>
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Time spent *</label>
+            <select value={logTime} onChange={(e) => setLogTime(e.target.value)}>
+              <option value="" disabled>Select…</option>
+              {TIME_SPENT_OPTIONS.map((t) => <option key={t.minutes} value={t.minutes}>{t.label}</option>)}
+            </select>
           </div>
-        )}
+          <div className="field">
+            <label>Notes *</label>
+            <input type="text" value={logNotes} onChange={(e) => setLogNotes(e.target.value)} placeholder="What did this cover?" />
+          </div>
+        </div>
+        <p className="muted" style={{ marginTop: -4, fontSize: 11 }}>* required — every deal is logged with a type, time, and note.</p>
         <div className="flexend">
           <button className="btn secondary" onClick={onClose}>Cancel</button>
           <button className="btn" onClick={save}>Add deal</button>
