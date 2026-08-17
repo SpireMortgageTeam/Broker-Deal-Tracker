@@ -275,7 +275,7 @@ function LogTab({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [newClientSource, setNewClientSource] = useState<ClientSource>(CLIENT_SOURCES[0]);
-  const [dealSel, setDealSel] = useState("__none__");
+  const [dealSel, setDealSel] = useState("");
   const [type, setType] = useState(CONTACT_TYPES[0]);
   const [outcome, setOutcome] = useState(OUTCOMES[0]);
   const [notes, setNotes] = useState("");
@@ -284,7 +284,8 @@ function LogTab({
   const q = query.trim().toLowerCase();
   const matches = q ? myClients.filter((c) => c.name.toLowerCase().includes(q)) : myClients;
   const exactMatch = myClients.find((c) => c.name.trim().toLowerCase() === q);
-  const clientDeals = selectedId ? db.deals.filter((d) => d.clientId === selectedId && d.broker === broker) : [];
+  // Only ACTIVE deals matter here — a completed deal shouldn't force deal-attribution.
+  const clientDeals = selectedId ? db.deals.filter((d) => d.clientId === selectedId && d.broker === broker && ACTIVE_STAGES.includes(d.stage)) : [];
 
   const todays = db.logs
     .filter((l) => l.broker === broker && l.date === todayISO())
@@ -318,12 +319,16 @@ function LogTab({
       clientId = newClient.id;
       isFollowUp = false; // brand-new touch point = new origination
     }
-    const dealId = selectedId && dealSel !== "__none__" ? dealSel : null;
+    // If the client has active deal(s), the time is about a deal — no "general" option.
+    // One active deal → use it automatically; several → use the one they picked.
+    let dealId: string | null = null;
+    if (selectedId && clientDeals.length === 1) dealId = clientDeals[0].id;
+    else if (selectedId && clientDeals.length >= 2) dealId = dealSel || clientDeals[0].id;
     const stageAtLog = dealId ? (db.deals.find((d) => d.id === dealId)?.stage ?? null) : null;
-    // Existing client, not tied to a deal => a follow-up on a prior touch point.
+    // Existing client with no active deal => a follow-up on a prior touch point.
     if (selectedId) isFollowUp = !dealId;
     await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent, dealId, stageAtLog, isFollowUp }]);
-    setQuery(""); setSelectedId(null); setNotes(""); setDealSel("__none__"); setOpen(false);
+    setQuery(""); setSelectedId(null); setNotes(""); setDealSel(""); setOpen(false);
     showToast(dealId ? "Time logged on deal" : isFollowUp ? "Follow-up logged" : "New outreach logged");
   }
 
@@ -343,7 +348,7 @@ function LogTab({
               type="text"
               value={query}
               placeholder="Start typing a name…"
-              onChange={(e) => { setQuery(e.target.value); setSelectedId(null); setDealSel("__none__"); setOpen(true); }}
+              onChange={(e) => { setQuery(e.target.value); setSelectedId(null); setDealSel(""); setOpen(true); }}
               onFocus={() => setOpen(true)}
               onBlur={() => setTimeout(() => setOpen(false), 150)}
             />
@@ -373,12 +378,11 @@ function LogTab({
               </select>
             </div>
           )}
-          {selectedId && clientDeals.length > 0 && (
+          {selectedId && clientDeals.length >= 2 && (
             <div className="field">
               <label>Which deal is this time for?</label>
-              <select value={dealSel} onChange={(e) => setDealSel(e.target.value)}>
-                <option value="__none__">Not deal-specific</option>
-                {clientDeals.map((d) => <option key={d.id} value={d.id}>{d.stage}{d.escalation ? " (flagged)" : ""}</option>)}
+              <select value={dealSel || clientDeals[0].id} onChange={(e) => setDealSel(e.target.value)}>
+                {clientDeals.map((d) => <option key={d.id} value={d.id}>{clientName(d.clientId)} — {d.stage}{d.escalation ? " (flagged)" : ""}</option>)}
               </select>
             </div>
           )}
@@ -409,8 +413,10 @@ function LogTab({
         </div>
         <p className="muted" style={{ marginTop: -4, fontSize: 12 }}>
           {selectedId
-            ? (dealSel !== "__none__"
-                ? "Logged as time on this deal (active deal)."
+            ? (clientDeals.length > 0
+                ? (clientDeals.length === 1
+                    ? `Logged as time on their active deal (${clientDeals[0].stage}).`
+                    : "Logged as time on the selected active deal.")
                 : "Follow-up → time added onto this existing client, not a new touch.")
             : query.trim()
             ? "New outreach → counts as a new-origination touch point."
