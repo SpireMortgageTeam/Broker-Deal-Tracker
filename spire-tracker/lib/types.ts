@@ -18,9 +18,6 @@ export type WorkloadStatus = "Low" | "Moderate" | "At Capacity";
 
 export type ClientSource = "New Lead" | "Pre-Approval Revival" | "Renewal" | "Ownwell";
 
-// Whether a deal is brand-new business or one that was already in the pipeline.
-export type DealType = "New origination" | "Existing pipeline";
-
 export interface Client {
   id: string;
   name: string;
@@ -40,6 +37,7 @@ export interface ContactLog {
   timeSpentMinutes: number;
   dealId: string | null; // which deal this time/touch applies to, if any
   stageAtLog: string | null; // the deal's stage at the moment this was logged
+  isFollowUp?: boolean; // for non-deal outreach: true = follow-up on an existing client, false/undefined = a brand-new touch point
 }
 
 export interface EscalationRecord {
@@ -55,7 +53,6 @@ export interface Deal {
   clientId: string;
   broker: string;
   value: number;
-  dealType?: DealType; // new origination vs already-existing pipeline deal (legacy deals treated as existing)
   stage: Stage;
   stageEnteredDate: string; // ISO date, updated whenever stage changes
   docStatus: DocStatus;

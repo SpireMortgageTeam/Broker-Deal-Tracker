@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource, DealType, ContactLog } from "@/lib/types";
-import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES, DEAL_TYPES } from "@/lib/constants";
+import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource, ContactLog } from "@/lib/types";
+import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo, totalMinutesForDeal } from "@/lib/utils";
 import { notifyEscalation } from "@/lib/api";
 import { showToast } from "./Toast";
@@ -217,19 +217,29 @@ function LogTab({
   });
 
   async function save() {
+    if (!notes.trim()) { showToast("Add a note — every entry needs context"); return; }
     let clientId = clientSel;
+    let isFollowUp = false;
     if (clientId === "__new__") {
       const name = newClientName.trim();
       if (!name) { showToast("Enter a client name first"); return; }
+      // A new outreach must be a genuinely new client — no duplicates.
+      if (myClients.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) {
+        showToast("That client already exists — pick them from the list to log a follow-up");
+        return;
+      }
       const newClient = { id: uid(), name, broker, createdDate: todayISO(), source: newClientSource };
       await mutate("clients", (arr) => [...arr, newClient]);
       clientId = newClient.id;
+      isFollowUp = false; // brand-new touch point = new origination
     }
     const dealId = dealSel === "__none__" ? null : dealSel;
     const stageAtLog = dealId ? (db.deals.find((d) => d.id === dealId)?.stage ?? null) : null;
-    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent, dealId, stageAtLog }]);
+    // Existing client, not tied to a deal => a follow-up on a prior touch point.
+    if (clientSel !== "__new__") isFollowUp = !dealId;
+    await mutate("logs", (arr) => [...arr, { id: uid(), clientId, broker, date: todayISO(), type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent, dealId, stageAtLog, isFollowUp }]);
     setNewClientName(""); setNotes(""); setDealSel("__none__");
-    showToast("Logged");
+    showToast(dealId ? "Time logged on deal" : isFollowUp ? "Follow-up logged" : "New outreach logged");
   }
 
   async function del(id: string) {
@@ -245,7 +255,7 @@ function LogTab({
           <div className="field">
             <label>Client</label>
             <select value={clientSel} onChange={(e) => { setClientSel(e.target.value); setDealSel("__none__"); }}>
-              <option value="__new__">+ New client…</option>
+              <option value="__new__">+ New outreach (new client)…</option>
               {myClients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -294,9 +304,16 @@ function LogTab({
           </select>
         </div>
         <div className="field">
-          <label>Notes (optional)</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. waiting on income docs" />
+          <label>Notes *</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What happened / what's needed" />
         </div>
+        <p className="muted" style={{ marginTop: -4, fontSize: 12 }}>
+          {clientSel === "__new__"
+            ? "New outreach → counts as a new-origination touch point."
+            : dealSel !== "__none__"
+            ? "Logged as time on this deal (active deal)."
+            : "Follow-up → time added onto this existing client, not a new touch."}
+        </p>
         <button className="btn" onClick={save}>Save entry</button>
       </div>
       <div className="card">
@@ -541,7 +558,6 @@ function EditDealModal({
   const [value, setValue] = useState(String(deal.value || 0));
   const [clientId, setClientId] = useState(deal.clientId);
   const [clientName, setClientName] = useState(currentClient?.name || "");
-  const [dealType, setDealType] = useState<DealType>(deal.dealType || "Existing pipeline");
 
   async function save() {
     // Rename the client currently attached (if its name was changed)
@@ -550,7 +566,7 @@ function EditDealModal({
       await mutate("clients", (arr) => arr.map((c) => c.id === currentClient.id ? { ...c, name: trimmed } : c));
     }
     await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
-      ? { ...d, value: Number(value) || 0, clientId, dealType }
+      ? { ...d, value: Number(value) || 0, clientId }
       : d));
     showToast("Deal updated");
     onClose();
@@ -563,12 +579,6 @@ function EditDealModal({
         <div className="field">
           <label>Deal value ($)</label>
           <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Deal type</label>
-          <select value={dealType} onChange={(e) => setDealType(e.target.value as DealType)}>
-            {DEAL_TYPES.map((t) => <option key={t}>{t}</option>)}
-          </select>
         </div>
         <div className="field">
           <label>Client (reassign this deal)</label>
@@ -602,6 +612,7 @@ function LogTimeModal({
   const [escalateReason, setEscalateReason] = useState("");
 
   async function save() {
+    if (!notes.trim()) { showToast("Add a note — every entry needs context"); return; }
     await mutate("logs", (arr) => [...arr, {
       id: uid(), clientId: deal.clientId, broker, date: todayISO(),
       type, outcome: "Other", notes: notes.trim(), timeSpentMinutes: timeSpent,
@@ -633,7 +644,7 @@ function LogTimeModal({
           </select>
         </div>
         <div className="field">
-          <label>Notes (optional)</label>
+          <label>Notes *</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What did this time cover?" />
         </div>
         {!deal.escalation && (
@@ -670,13 +681,11 @@ function NewDealModal({
   const [newClientSource, setNewClientSource] = useState<ClientSource>(CLIENT_SOURCES[0]);
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(ACTIVE_STAGES[0]);
-  const [dealType, setDealType] = useState<DealType | "">("");
   const [logTime, setLogTime] = useState<string>("");
   const [logNotes, setLogNotes] = useState("");
 
   async function save() {
     // Required, no defaults — so no deal gets entered without context.
-    if (!dealType) { showToast("Choose New origination or Existing pipeline"); return; }
     if (!logTime) { showToast("Select the time spent"); return; }
     if (!logNotes.trim()) { showToast("Add a note about this deal"); return; }
 
@@ -690,7 +699,7 @@ function NewDealModal({
     }
     const dealId = uid();
     const deal = {
-      id: dealId, clientId, broker, value: Number(value) || 0, dealType,
+      id: dealId, clientId, broker, value: Number(value) || 0,
       stage, stageEnteredDate: todayISO(), docStatus: "None" as const,
       escalation: false, escalationReason: "", escalatedAt: null,
       opsResponse: "", escalationHistory: [], createdAt: todayISO(),
@@ -730,18 +739,9 @@ function NewDealModal({
             </select>
           </div>
         )}
-        <div className="grid grid-2">
-          <div className="field">
-            <label>Estimated deal value ($)</label>
-            <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Deal type *</label>
-            <select value={dealType} onChange={(e) => setDealType(e.target.value as DealType)}>
-              <option value="" disabled>Select…</option>
-              {DEAL_TYPES.map((t) => <option key={t}>{t}</option>)}
-            </select>
-          </div>
+        <div className="field">
+          <label>Estimated deal value ($)</label>
+          <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
         </div>
         <div className="field">
           <label>Starting stage</label>

@@ -154,9 +154,6 @@ function WeekNav({ weekOffset, setWeekOffset, label }: { weekOffset: number; set
 function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: number; setWeekOffset: (n: number) => void }) {
   const wr = weekRange(weekOffset);
   const allOpen = db.deals.filter((d) => ACTIVE_STAGES.includes(d.stage));
-  const newOrig = allOpen.filter((d) => (d.dealType || "Existing pipeline") === "New origination");
-  const existingPipe = allOpen.filter((d) => (d.dealType || "Existing pipeline") !== "New origination");
-  const sumVal = (arr: typeof allOpen) => arr.reduce((s, d) => s + (d.value || 0), 0);
   const totalEsc = allOpen.filter((d) => d.escalation).length;
   const totalTouches = db.logs.filter((l) => inRange(l.date, wr.start, wr.end)).length;
   const bottlenecks = allOpen.filter((d) => daysBetween(d.stageEnteredDate, todayISO()) > BOTTLENECK_DAYS).length;
@@ -167,6 +164,11 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
   const maxDeals = Math.max(1, ...dealCounts);
 
   const weekLogs = db.logs.filter((l) => inRange(l.date, wr.start, wr.end));
+  // The three things ops wants to see, derived from how each touch was logged.
+  const newOrigLogs = weekLogs.filter((l) => !l.dealId && !l.isFollowUp);
+  const followUpLogs = weekLogs.filter((l) => !l.dealId && l.isFollowUp);
+  const dealLogs = weekLogs.filter((l) => l.dealId);
+  const hrsOf = (arr: typeof weekLogs) => (arr.reduce((s, l) => s + (l.timeSpentMinutes || 0), 0) / 60).toFixed(1);
   const totalMinutes = weekLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
   const minutesByBroker = db.brokers.map((b) => weekLogs.filter((l) => l.broker === b).reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0));
   const maxMinutesByBroker = Math.max(1, ...minutesByBroker);
@@ -189,9 +191,10 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
       <div className="statgrid" style={{ gridTemplateColumns: "1fr" }}>
         <div className="stat alt2"><div className="n">{fmtHrs(totalMinutes)} hrs</div><div className="l">Total time logged this week, team-wide</div></div>
       </div>
-      <div className="statgrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <div className="stat"><div className="n">{newOrig.length}</div><div className="l">New originations · ${sumVal(newOrig).toLocaleString()} in open pipeline</div></div>
-        <div className="stat alt"><div className="n">{existingPipe.length}</div><div className="l">Existing pipeline deals · ${sumVal(existingPipe).toLocaleString()}</div></div>
+      <div className="statgrid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+        <div className="stat"><div className="n">{newOrigLogs.length}</div><div className="l">New origination touch points · {hrsOf(newOrigLogs)} hrs</div></div>
+        <div className="stat alt2"><div className="n">{followUpLogs.length}</div><div className="l">Existing follow-ups · {hrsOf(followUpLogs)} hrs</div></div>
+        <div className="stat alt"><div className="n">{hrsOf(dealLogs)} hrs</div><div className="l">Active deal time · {dealLogs.length} entries</div></div>
       </div>
       <div className="card">
         <h3 style={{ marginBottom: 14 }}>Contact volume by broker</h3>
