@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource } from "@/lib/types";
-import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES } from "@/lib/constants";
+import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource, DealType, ContactLog } from "@/lib/types";
+import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES, DEAL_TYPES } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo, totalMinutesForDeal } from "@/lib/utils";
 import { notifyEscalation } from "@/lib/api";
 import { showToast } from "./Toast";
@@ -10,7 +10,7 @@ import TimeEntriesModal from "./TimeEntriesModal";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
-type Tab = "log" | "deals" | "capacity";
+type Tab = "log" | "deals" | "completed" | "capacity";
 
 export default function BrokerView({
   db,
@@ -30,6 +30,7 @@ export default function BrokerView({
   const myClients = db.clients.filter((c) => c.broker === broker);
   const myDeals = db.deals.filter((d) => d.broker === broker);
   const myOpenDeals = myDeals.filter((d) => ACTIVE_STAGES.includes(d.stage));
+  const myCompletedDeals = myDeals.filter((d) => d.stage === "Broker Complete");
   const wr = weekRange(0);
   const myLogsThisWeek = db.logs.filter((l) => l.broker === broker && l.date >= wr.start && l.date <= wr.end);
   const escCount = myOpenDeals.filter((d) => d.escalation).length;
@@ -74,6 +75,7 @@ export default function BrokerView({
       <div className="tabs">
         <div className={`tab ${tab === "log" ? "active" : ""}`} onClick={() => setTab("log")}>Outreach</div>
         <div className={`tab ${tab === "deals" ? "active" : ""}`} onClick={() => setTab("deals")}>Active Deals</div>
+        <div className={`tab ${tab === "completed" ? "active" : ""}`} onClick={() => setTab("completed")}>Completed{myCompletedDeals.length ? ` (${myCompletedDeals.length})` : ""}</div>
         <div className={`tab ${tab === "capacity" ? "active" : ""}`} onClick={() => setTab("capacity")}>Weekly Capacity</div>
       </div>
 
@@ -127,8 +129,58 @@ export default function BrokerView({
           )}
         </>
       )}
+      {tab === "completed" && (
+        <CompletedDeals deals={myCompletedDeals} db={db} mutate={mutate} clientName={clientName} />
+      )}
       {tab === "capacity" && <CapacityTab db={db} mutate={mutate} broker={broker} />}
     </>
+  );
+}
+
+function CompletedDeals({
+  deals, db, mutate, clientName,
+}: { deals: Deal[]; db: TrackerDB; mutate: Mutate; clientName: (id: string) => string }) {
+  const sorted = deals.slice().sort((a, b) => (b.stageEnteredDate || "").localeCompare(a.stageEnteredDate || ""));
+
+  async function reopen(dealId: string) {
+    await mutate("deals", (arr) => arr.map((d) => d.id === dealId
+      ? { ...d, stage: "Conditions", stageEnteredDate: todayISO() }
+      : d));
+    showToast("Deal reopened into Active Deals (Conditions)");
+  }
+
+  return (
+    <div className="card">
+      <div className="section-title">
+        <h3>Completed deals</h3>
+        <span className="muted">{sorted.length} marked Broker Complete · removed from Active Deals</span>
+      </div>
+      {sorted.length ? (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Client</th><th>Completed</th><th>Value</th><th>Time logged</th><th></th></tr></thead>
+            <tbody>
+              {sorted.map((d) => {
+                const mins = db.logs.filter((l) => l.dealId === d.id).reduce((s, l) => s + (l.timeSpentMinutes || 0), 0);
+                return (
+                  <tr key={d.id}>
+                    <td><b>{clientName(d.clientId)}</b></td>
+                    <td className="muted">{d.stageEnteredDate}</td>
+                    <td>${Number(d.value || 0).toLocaleString()}</td>
+                    <td className="muted">{(mins / 60).toFixed(1)} hrs</td>
+                    <td style={{ textAlign: "right" }}>
+                      <button className="btn secondary small" onClick={() => reopen(d.id)}>Reopen</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="empty">No completed deals yet. When you set a deal&apos;s stage to &quot;Broker Complete,&quot; it moves here.</div>
+      )}
+    </div>
   );
 }
 
@@ -183,6 +235,7 @@ function LogTab({
   async function del(id: string) {
     await mutate("logs", (arr) => arr.filter((l) => l.id !== id));
   }
+  const [editLog, setEditLog] = useState<ContactLog | null>(null);
 
   return (
     <>
@@ -266,7 +319,10 @@ function LogTab({
                   <td>{l.outcome}</td>
                   <td className="muted">{l.timeSpentMinutes} min</td>
                   <td className="muted">{l.notes || "—"}</td>
-                  <td><button className="x-link" onClick={() => del(l.id)}>Delete</button></td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="x-link" style={{ color: "var(--charcoal)" }} onClick={() => setEditLog(l)}>Edit</button>
+                    <button className="x-link" onClick={() => del(l.id)}>Delete</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -276,7 +332,61 @@ function LogTab({
           <div className="empty">Nothing logged yet today. First entry above takes 10 seconds.</div>
         )}
       </div>
+      {editLog && <EditLogModal log={editLog} mutate={mutate} onClose={() => setEditLog(null)} />}
     </>
+  );
+}
+
+function EditLogModal({
+  log, mutate, onClose,
+}: { log: ContactLog; mutate: Mutate; onClose: () => void }) {
+  const [type, setType] = useState(log.type);
+  const [outcome, setOutcome] = useState(log.outcome);
+  const [notes, setNotes] = useState(log.notes || "");
+  const [timeSpent, setTimeSpent] = useState(log.timeSpentMinutes || 0);
+
+  async function save() {
+    await mutate("logs", (arr) => arr.map((l) => l.id === log.id
+      ? { ...l, type, outcome, notes: notes.trim(), timeSpentMinutes: timeSpent }
+      : l));
+    showToast("Entry updated");
+    onClose();
+  }
+
+  return (
+    <div className="modal-bg" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal">
+        <h3 style={{ marginBottom: 16 }}>Edit log entry</h3>
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Contact type</label>
+            <select value={type} onChange={(e) => setType(e.target.value as any)}>
+              {CONTACT_TYPES.map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Outcome</label>
+            <select value={outcome} onChange={(e) => setOutcome(e.target.value as any)}>
+              {OUTCOMES.map((o) => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="field">
+          <label>Time spent</label>
+          <select value={timeSpent} onChange={(e) => setTimeSpent(Number(e.target.value))}>
+            {TIME_SPENT_OPTIONS.map((t) => <option key={t.minutes} value={t.minutes}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Notes</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </div>
+        <div className="flexend">
+          <button className="btn secondary" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={save}>Save changes</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -288,6 +398,7 @@ function DealRow({
   const [reasonDraft, setReasonDraft] = useState(deal.escalationReason || "");
   const [showLogTime, setShowLogTime] = useState(false);
   const [showEntries, setShowEntries] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const recentResolution = (deal.escalationHistory || []).slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt))[0] || null;
   const dealLogs = db.logs.filter((l) => l.dealId === deal.id);
   const dealMinutes = dealLogs.reduce((sum, l) => sum + (l.timeSpentMinutes || 0), 0);
@@ -373,7 +484,10 @@ function DealRow({
             Flag
           </label>
         </td>
-        <td><button className="x-link" onClick={remove}>Remove</button></td>
+        <td style={{ whiteSpace: "nowrap" }}>
+          <button className="x-link" style={{ color: "var(--charcoal)" }} onClick={() => setShowEdit(true)}>Edit</button>
+          <button className="x-link" onClick={remove}>Remove</button>
+        </td>
       </tr>
       {deal.escalation && (
         <tr>
@@ -410,9 +524,71 @@ function DealRow({
         <LogTimeModal deal={deal} broker={broker} mutate={mutate} onClose={() => setShowLogTime(false)} />
       )}
       {showEntries && (
-        <TimeEntriesModal dealLabel={`${clientName(deal.clientId)} — ${deal.stage}`} logs={dealLogs} mutate={mutate} allowEdit={false} onClose={() => setShowEntries(false)} />
+        <TimeEntriesModal dealLabel={`${clientName(deal.clientId)} — ${deal.stage}`} logs={dealLogs} mutate={mutate} allowEdit={true} onClose={() => setShowEntries(false)} />
+      )}
+      {showEdit && (
+        <EditDealModal deal={deal} db={db} mutate={mutate} broker={broker} onClose={() => setShowEdit(false)} />
       )}
     </>
+  );
+}
+
+function EditDealModal({
+  deal, db, mutate, broker, onClose,
+}: { deal: Deal; db: TrackerDB; mutate: Mutate; broker: string; onClose: () => void }) {
+  const myClients = db.clients.filter((c) => c.broker === broker);
+  const currentClient = db.clients.find((c) => c.id === deal.clientId);
+  const [value, setValue] = useState(String(deal.value || 0));
+  const [clientId, setClientId] = useState(deal.clientId);
+  const [clientName, setClientName] = useState(currentClient?.name || "");
+  const [dealType, setDealType] = useState<DealType>(deal.dealType || "Existing pipeline");
+
+  async function save() {
+    // Rename the client currently attached (if its name was changed)
+    const trimmed = clientName.trim();
+    if (trimmed && currentClient && trimmed !== currentClient.name && clientId === deal.clientId) {
+      await mutate("clients", (arr) => arr.map((c) => c.id === currentClient.id ? { ...c, name: trimmed } : c));
+    }
+    await mutate("deals", (arr) => arr.map((d) => d.id === deal.id
+      ? { ...d, value: Number(value) || 0, clientId, dealType }
+      : d));
+    showToast("Deal updated");
+    onClose();
+  }
+
+  return (
+    <div className="modal-bg" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal">
+        <h3 style={{ marginBottom: 16 }}>Edit deal</h3>
+        <div className="field">
+          <label>Deal value ($)</label>
+          <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Deal type</label>
+          <select value={dealType} onChange={(e) => setDealType(e.target.value as DealType)}>
+            {DEAL_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Client (reassign this deal)</label>
+          <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            {myClients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        {clientId === deal.clientId && (
+          <div className="field">
+            <label>Rename this client</label>
+            <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Client full name" />
+            <span className="muted" style={{ fontSize: 11 }}>Updates the client everywhere they appear.</span>
+          </div>
+        )}
+        <div className="flexend">
+          <button className="btn secondary" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={save}>Save changes</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -494,6 +670,10 @@ function NewDealModal({
   const [newClientSource, setNewClientSource] = useState<ClientSource>(CLIENT_SOURCES[0]);
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(ACTIVE_STAGES[0]);
+  const [dealType, setDealType] = useState<DealType>("New origination");
+  const [logNow, setLogNow] = useState(false);
+  const [logTime, setLogTime] = useState(TIME_SPENT_OPTIONS[0].minutes);
+  const [logNotes, setLogNotes] = useState("");
 
   async function save() {
     let clientId = clientSel;
@@ -504,14 +684,23 @@ function NewDealModal({
       await mutate("clients", (arr) => [...arr, nc]);
       clientId = nc.id;
     }
+    const dealId = uid();
     const deal = {
-      id: uid(), clientId, broker, value: Number(value) || 0,
+      id: dealId, clientId, broker, value: Number(value) || 0, dealType,
       stage, stageEnteredDate: todayISO(), docStatus: "None" as const,
       escalation: false, escalationReason: "", escalatedAt: null,
       opsResponse: "", escalationHistory: [], createdAt: todayISO(),
     };
     await mutate("deals", (arr) => [...arr, deal]);
-    showToast("Deal added");
+    // Optionally log a first time entry against this deal in the same step.
+    if (logNow) {
+      await mutate("logs", (arr) => [...arr, {
+        id: uid(), clientId, broker, date: todayISO(),
+        type: CONTACT_TYPES[0], outcome: "Other", notes: logNotes.trim(),
+        timeSpentMinutes: logTime, dealId, stageAtLog: stage,
+      }]);
+    }
+    showToast(logNow ? "Deal added and time logged" : "Deal added");
     onClose();
   }
 
@@ -540,9 +729,17 @@ function NewDealModal({
             </select>
           </div>
         )}
-        <div className="field">
-          <label>Estimated deal value ($)</label>
-          <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Estimated deal value ($)</label>
+            <input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Deal type</label>
+            <select value={dealType} onChange={(e) => setDealType(e.target.value as DealType)}>
+              {DEAL_TYPES.map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </div>
         </div>
         <div className="field">
           <label>Starting stage</label>
@@ -550,6 +747,26 @@ function NewDealModal({
             {ACTIVE_STAGES.map((s) => <option key={s}>{s}</option>)}
           </select>
         </div>
+        <div className="field">
+          <label className="checkrow" style={{ textTransform: "none", fontWeight: 600, color: "var(--charcoal)" }}>
+            <input type="checkbox" checked={logNow} onChange={(e) => setLogNow(e.target.checked)} />
+            Log some time on this deal now
+          </label>
+        </div>
+        {logNow && (
+          <div className="grid grid-2">
+            <div className="field">
+              <label>Time spent</label>
+              <select value={logTime} onChange={(e) => setLogTime(Number(e.target.value))}>
+                {TIME_SPENT_OPTIONS.map((t) => <option key={t.minutes} value={t.minutes}>{t.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Notes</label>
+              <input type="text" value={logNotes} onChange={(e) => setLogNotes(e.target.value)} placeholder="What did this cover?" />
+            </div>
+          </div>
+        )}
         <div className="flexend">
           <button className="btn secondary" onClick={onClose}>Cancel</button>
           <button className="btn" onClick={save}>Add deal</button>

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { ContactLog, TrackerDB } from "@/lib/types";
+import { CONTACT_TYPES } from "@/lib/constants";
 import { fmtDate } from "@/lib/utils";
 import { showToast } from "./Toast";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
@@ -35,6 +36,10 @@ export default function TimeEntriesModal({
     await mutate("logs", (arr: TrackerDB["logs"]) => arr.map((l) => l.id === id ? { ...l, timeSpentMinutes: minutes } : l));
   }
 
+  async function updateEntry(id: string, patch: Partial<ContactLog>) {
+    await mutate("logs", (arr: TrackerDB["logs"]) => arr.map((l) => l.id === id ? { ...l, ...patch } : l));
+  }
+
   return (
     <div className="modal-bg" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ maxWidth: 560 }}>
@@ -54,7 +59,7 @@ export default function TimeEntriesModal({
             </tr></thead>
             <tbody>
               {sorted.map((l) => (
-                <EntryRow key={l.id} log={l} allowEdit={allowEdit} onUpdateMinutes={updateMinutes} onDelete={deleteEntry} />
+                <EntryRow key={l.id} log={l} allowEdit={allowEdit} onUpdateMinutes={updateMinutes} onUpdateEntry={updateEntry} onDelete={deleteEntry} />
               ))}
             </tbody>
           </table>
@@ -71,17 +76,27 @@ export default function TimeEntriesModal({
 }
 
 function EntryRow({
-  log, allowEdit, onUpdateMinutes, onDelete,
+  log, allowEdit, onUpdateMinutes, onUpdateEntry, onDelete,
 }: {
   log: ContactLog; allowEdit: boolean;
   onUpdateMinutes: (id: string, minutes: number) => void;
+  onUpdateEntry: (id: string, patch: Partial<ContactLog>) => void;
   onDelete: (id: string) => void;
 }) {
   const [minutes, setMinutes] = useState(log.timeSpentMinutes);
+  const [notes, setNotes] = useState(log.notes || "");
   return (
     <tr>
       <td>{fmtDate(log.date)}</td>
-      <td><span className="pill">{log.type}</span></td>
+      <td>
+        {allowEdit ? (
+          <select className="inline-select" value={log.type} onChange={(e) => onUpdateEntry(log.id, { type: e.target.value as ContactLog["type"] })}>
+            {CONTACT_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        ) : (
+          <span className="pill">{log.type}</span>
+        )}
+      </td>
       <td className="muted">{log.stageAtLog || "—"}</td>
       <td>
         {allowEdit ? (
@@ -97,7 +112,19 @@ function EntryRow({
           <span>{log.timeSpentMinutes} min</span>
         )}
       </td>
-      <td className="muted">{log.notes || "—"}</td>
+      <td className="muted">
+        {allowEdit ? (
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={() => { if (notes !== (log.notes || "")) onUpdateEntry(log.id, { notes: notes.trim() }); }}
+            placeholder="notes"
+          />
+        ) : (
+          log.notes || "—"
+        )}
+      </td>
       <td><button className="x-link" onClick={() => onDelete(log.id)}>Delete</button></td>
     </tr>
   );

@@ -18,6 +18,9 @@ export type WorkloadStatus = "Low" | "Moderate" | "At Capacity";
 
 export type ClientSource = "New Lead" | "Pre-Approval Revival" | "Renewal" | "Ownwell";
 
+// Whether a deal is brand-new business or one that was already in the pipeline.
+export type DealType = "New origination" | "Existing pipeline";
+
 export interface Client {
   id: string;
   name: string;
@@ -52,6 +55,7 @@ export interface Deal {
   clientId: string;
   broker: string;
   value: number;
+  dealType?: DealType; // new origination vs already-existing pipeline deal (legacy deals treated as existing)
   stage: Stage;
   stageEnteredDate: string; // ISO date, updated whenever stage changes
   docStatus: DocStatus;

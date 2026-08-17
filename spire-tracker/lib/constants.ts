@@ -1,4 +1,6 @@
-import { Stage, ContactType, Outcome, DocStatus, ClientSource } from "./types";
+import { Stage, ContactType, Outcome, DocStatus, ClientSource, DealType } from "./types";
+
+export const DEAL_TYPES: DealType[] = ["New origination", "Existing pipeline"];
 
 export const STAGES: Stage[] = [
   "Doc Collection",

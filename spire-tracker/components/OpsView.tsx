@@ -154,6 +154,9 @@ function WeekNav({ weekOffset, setWeekOffset, label }: { weekOffset: number; set
 function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset: number; setWeekOffset: (n: number) => void }) {
   const wr = weekRange(weekOffset);
   const allOpen = db.deals.filter((d) => ACTIVE_STAGES.includes(d.stage));
+  const newOrig = allOpen.filter((d) => (d.dealType || "Existing pipeline") === "New origination");
+  const existingPipe = allOpen.filter((d) => (d.dealType || "Existing pipeline") !== "New origination");
+  const sumVal = (arr: typeof allOpen) => arr.reduce((s, d) => s + (d.value || 0), 0);
   const totalEsc = allOpen.filter((d) => d.escalation).length;
   const totalTouches = db.logs.filter((l) => inRange(l.date, wr.start, wr.end)).length;
   const bottlenecks = allOpen.filter((d) => daysBetween(d.stageEnteredDate, todayISO()) > BOTTLENECK_DAYS).length;
@@ -185,6 +188,10 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
       </div>
       <div className="statgrid" style={{ gridTemplateColumns: "1fr" }}>
         <div className="stat alt2"><div className="n">{fmtHrs(totalMinutes)} hrs</div><div className="l">Total time logged this week, team-wide</div></div>
+      </div>
+      <div className="statgrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div className="stat"><div className="n">{newOrig.length}</div><div className="l">New originations · ${sumVal(newOrig).toLocaleString()} in open pipeline</div></div>
+        <div className="stat alt"><div className="n">{existingPipe.length}</div><div className="l">Existing pipeline deals · ${sumVal(existingPipe).toLocaleString()}</div></div>
       </div>
       <div className="card">
         <h3 style={{ marginBottom: 14 }}>Contact volume by broker</h3>
