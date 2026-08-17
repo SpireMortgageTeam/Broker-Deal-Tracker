@@ -184,7 +184,7 @@ function Overview({ db, weekOffset, setWeekOffset }: { db: TrackerDB; weekOffset
       <WeekNav weekOffset={weekOffset} setWeekOffset={setWeekOffset} label={wr.label} />
       <div className="statgrid">
         <div className="stat"><div className="n">{allOpen.length}</div><div className="l">Total open deals</div></div>
-        <div className="stat alt2"><div className="n">{totalTouches}</div><div className="l">Team touches this week</div></div>
+        <div className="stat alt2"><div className="n">{totalTouches}</div><div className="l">Total entries this week</div></div>
         <div className="stat" style={{ background: bottlenecks ? "var(--danger)" : "var(--charcoal)" }}><div className="n">{bottlenecks}</div><div className="l">Stuck &gt;{BOTTLENECK_DAYS}d</div></div>
         <div className="stat alt"><div className="n">{totalEsc}</div><div className="l">Active escalations</div></div>
       </div>
