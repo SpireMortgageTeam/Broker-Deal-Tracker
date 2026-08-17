@@ -10,7 +10,7 @@ import TimeEntriesModal from "./TimeEntriesModal";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
-type Tab = "log" | "deals" | "completed" | "capacity";
+type Tab = "log" | "deals" | "completed" | "clients" | "capacity";
 
 export default function BrokerView({
   db,
@@ -76,6 +76,7 @@ export default function BrokerView({
         <div className={`tab ${tab === "log" ? "active" : ""}`} onClick={() => setTab("log")}>Outreach</div>
         <div className={`tab ${tab === "deals" ? "active" : ""}`} onClick={() => setTab("deals")}>Active Deals</div>
         <div className={`tab ${tab === "completed" ? "active" : ""}`} onClick={() => setTab("completed")}>Completed{myCompletedDeals.length ? ` (${myCompletedDeals.length})` : ""}</div>
+        <div className={`tab ${tab === "clients" ? "active" : ""}`} onClick={() => setTab("clients")}>Clients</div>
         <div className={`tab ${tab === "capacity" ? "active" : ""}`} onClick={() => setTab("capacity")}>Weekly Capacity</div>
       </div>
 
@@ -132,8 +133,88 @@ export default function BrokerView({
       {tab === "completed" && (
         <CompletedDeals deals={myCompletedDeals} db={db} mutate={mutate} clientName={clientName} />
       )}
+      {tab === "clients" && <ClientsTab db={db} mutate={mutate} myClients={myClients} />}
       {tab === "capacity" && <CapacityTab db={db} mutate={mutate} broker={broker} />}
     </>
+  );
+}
+
+function ClientsTab({
+  db, mutate, myClients,
+}: { db: TrackerDB; mutate: Mutate; myClients: TrackerDB["clients"] }) {
+  const sorted = myClients.slice().sort((a, b) => a.name.localeCompare(b.name));
+
+  async function rename(id: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await mutate("clients", (arr) => arr.map((c) => c.id === id ? { ...c, name: trimmed } : c));
+  }
+
+  async function del(id: string, name: string) {
+    const logs = db.logs.filter((l) => l.clientId === id).length;
+    const deals = db.deals.filter((d) => d.clientId === id).length;
+    if (!confirm(`Delete "${name}"? This permanently removes the client along with ${logs} log entr${logs === 1 ? "y" : "ies"} and ${deals} deal${deals === 1 ? "" : "s"}. This can't be undone.`)) return;
+    await mutate("logs", (arr) => arr.filter((l) => l.clientId !== id));
+    await mutate("deals", (arr) => arr.filter((d) => d.clientId !== id));
+    await mutate("clients", (arr) => arr.filter((c) => c.id !== id));
+    showToast("Client deleted");
+  }
+
+  async function merge(fromId: string, toId: string) {
+    if (!toId || toId === fromId) return;
+    const fromName = myClients.find((c) => c.id === fromId)?.name;
+    const toName = myClients.find((c) => c.id === toId)?.name;
+    if (!confirm(`Merge "${fromName}" into "${toName}"? All of ${fromName}'s entries, time, and deals move onto ${toName}, and "${fromName}" is removed. Nothing is lost.`)) return;
+    await mutate("logs", (arr) => arr.map((l) => l.clientId === fromId ? { ...l, clientId: toId } : l));
+    await mutate("deals", (arr) => arr.map((d) => d.clientId === fromId ? { ...d, clientId: toId } : d));
+    await mutate("clients", (arr) => arr.filter((c) => c.id !== fromId));
+    showToast("Clients merged");
+  }
+
+  return (
+    <div className="card">
+      <div className="section-title">
+        <h3>Clients</h3>
+        <span className="muted">{sorted.length} · rename, delete junk, or merge duplicates (time is kept)</span>
+      </div>
+      {sorted.length ? (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Entries</th><th>Time</th><th>Deals</th><th>Merge into…</th><th></th></tr></thead>
+            <tbody>
+              {sorted.map((c) => {
+                const logs = db.logs.filter((l) => l.clientId === c.id);
+                const mins = logs.reduce((s, l) => s + (l.timeSpentMinutes || 0), 0);
+                const deals = db.deals.filter((d) => d.clientId === c.id).length;
+                return (
+                  <tr key={c.id}>
+                    <td>
+                      <input
+                        type="text"
+                        defaultValue={c.name}
+                        onBlur={(e) => { if (e.target.value.trim() !== c.name) rename(c.id, e.target.value); }}
+                      />
+                    </td>
+                    <td className="muted">{logs.length}</td>
+                    <td className="muted">{(mins / 60).toFixed(1)} hrs</td>
+                    <td className="muted">{deals}</td>
+                    <td>
+                      <select className="inline-select" value="" onChange={(e) => merge(c.id, e.target.value)}>
+                        <option value="">Merge into…</option>
+                        {sorted.filter((o) => o.id !== c.id).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      </select>
+                    </td>
+                    <td style={{ textAlign: "right" }}><button className="x-link" onClick={() => del(c.id, c.name)}>Delete</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="empty">No clients yet.</div>
+      )}
+    </div>
   );
 }
 
