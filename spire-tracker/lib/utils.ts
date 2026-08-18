@@ -2,8 +2,31 @@ export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+// The team's local timezone. "Today" and week boundaries are computed here so
+// the day flips at local midnight (not UTC midnight, which for Calgary lands at
+// ~6pm and made "Today's activity" empty every evening).
+export const TIME_ZONE = "America/Edmonton"; // Calgary / Mountain Time
+
+// YYYY-MM-DD for a given date in the team's timezone (en-CA formats as YYYY-MM-DD).
+function localDateISO(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+// YYYY-MM-DD from a Date's own calendar fields (used after date math).
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateISO(new Date());
 }
 
 export function fmtDate(iso: string | null | undefined): string {
@@ -33,13 +56,13 @@ export interface WeekRange {
 }
 
 export function weekRange(offset: number): WeekRange {
-  const base = new Date();
-  base.setDate(base.getDate() + offset * 7);
-  const monday = getMonday(base.toISOString().slice(0, 10));
+  // Seed from the team's local "today" so the week lines up with their calendar.
+  const monday = getMonday(todayISO());
+  monday.setDate(monday.getDate() + offset * 7);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  const start = monday.toISOString().slice(0, 10);
-  const end = sunday.toISOString().slice(0, 10);
+  const start = ymd(monday);
+  const end = ymd(sunday);
   return { start, end, label: `${fmtDate(start)} – ${fmtDate(end)}` };
 }
 
