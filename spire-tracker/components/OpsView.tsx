@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { TrackerDB } from "@/lib/types";
 import { ACTIVE_STAGES, BOTTLENECK_DAYS, CONTACT_TYPES } from "@/lib/constants";
-import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDateTime, totalMinutesForDeal } from "@/lib/utils";
+import { todayISO, daysBetween, weekRange, inRange, uid, nowISO, businessMinutesBetween, formatBusinessDuration, fmtDate, fmtDateTime, totalMinutesForDeal } from "@/lib/utils";
 import { notifyResponse, listBackups, restoreBackup } from "@/lib/api";
 import { useEffect } from "react";
 import { showToast } from "./Toast";
@@ -11,7 +11,7 @@ import TimeEntriesModal from "./TimeEntriesModal";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
-type Tab = "overview" | "deals" | "escalations" | "report" | "brokers" | "backups";
+type Tab = "overview" | "coaching" | "deals" | "escalations" | "report" | "brokers" | "backups";
 
 export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -19,6 +19,7 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
 
   const tabs: [Tab, string][] = [
     ["overview", "Team Overview"],
+    ["coaching", "Coaching"],
     ["deals", "All Deals"],
     ["escalations", "Escalations"],
     ["report", "Weekly Report"],
@@ -38,6 +39,7 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
         ))}
       </div>
       {tab === "overview" && <Overview db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
+      {tab === "coaching" && <Coaching db={db} />}
       {tab === "deals" && <AllDeals db={db} mutate={mutate} clientName={clientName} />}
       {tab === "escalations" && <Escalations db={db} mutate={mutate} clientName={clientName} />}
       {tab === "report" && <Report db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
@@ -135,6 +137,185 @@ function BackupsPanel({ db }: { db: TrackerDB }) {
           Choose backup file…
           <input type="file" accept="application/json,.json" style={{ display: "none" }} onChange={importFile} disabled={busy} />
         </label>
+      </div>
+    </>
+  );
+}
+
+function Coaching({ db }: { db: TrackerDB }) {
+  const [brokerF, setBrokerF] = useState("");
+  const [range, setRange] = useState<"this" | "last" | "30" | "all">("this");
+  const [category, setCategory] = useState<"all" | "new" | "followup" | "deal">("all");
+  const [typeF, setTypeF] = useState<string>("all");
+  const [sortKey, setSortKey] = useState<string | null>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const handleSort = makeSortHandler(sortKey, setSortKey, sortDir, setSortDir);
+
+  const clientName = (id: string) => db.clients.find((c) => c.id === id)?.name ?? "(unknown)";
+
+  // date bounds for the chosen timeframe
+  let start = "", end = "";
+  if (range === "this") { const w = weekRange(0); start = w.start; end = w.end; }
+  else if (range === "last") { const w = weekRange(-1); start = w.start; end = w.end; }
+  else if (range === "30") {
+    const t = todayISO();
+    const d = new Date(t + "T00:00:00");
+    d.setDate(d.getDate() - 29);
+    start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    end = t;
+  }
+  const dateBounded = range !== "all";
+  const rangeLabel = range === "this" ? "this week" : range === "last" ? "last week" : range === "30" ? "last 30 days" : "all time";
+
+  const catOf = (l: TrackerDB["logs"][number]) => (l.dealId ? "deal" : l.isFollowUp ? "followup" : "new");
+  const catLabel = (c: string) => (c === "deal" ? "Active deal" : c === "followup" ? "Follow-up" : "New origination");
+
+  const filtered = db.logs.filter((l) => {
+    if (brokerF && l.broker !== brokerF) return false;
+    if (dateBounded && !(l.date >= start && l.date <= end)) return false;
+    if (category !== "all" && catOf(l) !== category) return false;
+    if (typeF !== "all" && l.type !== typeF) return false;
+    return true;
+  });
+
+  const hrs = (arr: typeof filtered) => (arr.reduce((s, l) => s + (l.timeSpentMinutes || 0), 0) / 60).toFixed(1);
+  const newL = filtered.filter((l) => catOf(l) === "new");
+  const folL = filtered.filter((l) => catOf(l) === "followup");
+  const dealL = filtered.filter((l) => catOf(l) === "deal");
+  const brokersToShow = brokerF ? [brokerF] : db.brokers;
+
+  const wr = weekRange(0);
+  const cap = brokerF ? db.capacity.find((c) => c.broker === brokerF && c.weekStart === wr.start) : null;
+
+  const sortedLog = sortRows(filtered, sortKey, sortDir, (l, key) => {
+    if (key === "date") return l.date;
+    if (key === "broker") return l.broker;
+    if (key === "client") return clientName(l.clientId);
+    if (key === "type") return l.type;
+    if (key === "cat") return catOf(l);
+    if (key === "time") return l.timeSpentMinutes;
+    return "";
+  });
+
+  return (
+    <>
+      <div className="card">
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Broker</label>
+            <select value={brokerF} onChange={(e) => setBrokerF(e.target.value)}>
+              <option value="">All brokers</option>
+              {db.brokers.map((b) => <option key={b}>{b}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Timeframe</label>
+            <select value={range} onChange={(e) => setRange(e.target.value as "this" | "last" | "30" | "all")}>
+              <option value="this">This week</option>
+              <option value="last">Last week</option>
+              <option value="30">Last 30 days</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value as "all" | "new" | "followup" | "deal")}>
+              <option value="all">All categories</option>
+              <option value="new">New origination</option>
+              <option value="followup">Existing follow-ups</option>
+              <option value="deal">Active deal time</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Activity type</label>
+            <select value={typeF} onChange={(e) => setTypeF(e.target.value)}>
+              <option value="all">All types</option>
+              {CONTACT_TYPES.map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="statgrid">
+        <div className="stat"><div className="n">{newL.length}</div><div className="l">New origination · {hrs(newL)} hrs</div></div>
+        <div className="stat alt2"><div className="n">{folL.length}</div><div className="l">Follow-ups · {hrs(folL)} hrs</div></div>
+        <div className="stat alt"><div className="n">{dealL.length}</div><div className="l">Active deal entries · {hrs(dealL)} hrs</div></div>
+        <div className="stat" style={{ background: "var(--greyblue)" }}><div className="n">{hrs(filtered)} hrs</div><div className="l">Total logged · {filtered.length} entries</div></div>
+      </div>
+
+      {cap && (
+        <div className="card">
+          <div className="section-title"><h3>{brokerF} — this week&apos;s capacity check-in</h3><span className="muted">{cap.savedAt}</span></div>
+          <p style={{ margin: 0 }}>
+            <span className={`pill ${cap.status === "At Capacity" ? "bad" : cap.status === "Moderate" ? "warn" : "ok"}`}>{cap.status}</span>
+            <span className="muted" style={{ marginLeft: 10 }}>Next week: {cap.callsCapacity || "—"} calls / {cap.dealsCapacity || "—"} deals</span>
+          </p>
+          {cap.comments && <p className="muted" style={{ marginBottom: 0 }}>{cap.comments}</p>}
+        </div>
+      )}
+
+      <div className="card">
+        <div className="section-title"><h3>By broker</h3><span className="muted">{rangeLabel}{category !== "all" ? ` · ${catLabel(category)}` : ""}</span></div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Broker</th><th>New</th><th>Follow-ups</th><th>Deal entries</th><th>Hours</th><th>Open deals</th><th>Stuck &gt;{BOTTLENECK_DAYS}d</th><th>Escalations</th>
+            </tr></thead>
+            <tbody>
+              {brokersToShow.length ? brokersToShow.map((b) => {
+                const bl = filtered.filter((l) => l.broker === b);
+                const open = db.deals.filter((d) => d.broker === b && ACTIVE_STAGES.includes(d.stage));
+                const stuck = open.filter((d) => daysBetween(d.stageEnteredDate, todayISO()) > BOTTLENECK_DAYS).length;
+                const esc = open.filter((d) => d.escalation).length;
+                return (
+                  <tr key={b}>
+                    <td><b>{b}</b></td>
+                    <td>{bl.filter((l) => catOf(l) === "new").length}</td>
+                    <td>{bl.filter((l) => catOf(l) === "followup").length}</td>
+                    <td>{bl.filter((l) => catOf(l) === "deal").length}</td>
+                    <td>{hrs(bl)}</td>
+                    <td>{open.length}</td>
+                    <td>{stuck ? <span className="pill bad">{stuck}</span> : "0"}</td>
+                    <td>{esc ? <span className="pill bad">{esc}</span> : "0"}</td>
+                  </tr>
+                );
+              }) : <tr><td colSpan={8}><div className="empty">No brokers.</div></td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="section-title"><h3>Activity log</h3><span className="muted">{filtered.length} entries · {rangeLabel}</span></div>
+        {sortedLog.length ? (
+          <div className="table-wrap">
+            <table>
+              <thead><tr>
+                <SortableTh label="Date" sortKey="date" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Broker" sortKey="broker" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Client" sortKey="client" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Type" sortKey="type" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Category" sortKey="cat" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Time" sortKey="time" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <th>Notes</th>
+              </tr></thead>
+              <tbody>
+                {sortedLog.slice(0, 300).map((l) => (
+                  <tr key={l.id}>
+                    <td className="muted">{fmtDate(l.date)}</td>
+                    <td>{l.broker}</td>
+                    <td>{clientName(l.clientId)}</td>
+                    <td><span className="pill">{l.type}</span></td>
+                    <td className="muted">{catLabel(catOf(l))}</td>
+                    <td className="muted">{l.timeSpentMinutes} min</td>
+                    <td className="muted">{l.notes || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="empty">No activity matches these filters.</div>}
+        {sortedLog.length > 300 && <p className="muted" style={{ marginTop: 10 }}>Showing the first 300 — narrow the filters to see more.</p>}
       </div>
     </>
   );
