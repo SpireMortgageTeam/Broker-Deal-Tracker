@@ -109,6 +109,33 @@ Setup is two parts — configure the app, and add the email credentials.
 
 > Testing tip: before verifying a domain, Resend lets you send from `onboarding@resend.dev`, but only to the email you signed up with. Fine for a first test; verify the domain before rolling out to the team.
 
+## Email Assistant (Claude API)
+
+A tab that turns pasted call notes into a client-facing recap email plus
+internal underwriting notes, replacing the team's old ChatGPT custom GPTs for
+this. It's restricted to specific broker names (see `EMAIL_ASSISTANT_BROKERS`
+in `lib/constants.ts`) while it's being tested — edit that list to add more
+staff once it's ready to roll out further.
+
+Setup:
+
+1. Create an API key at https://console.anthropic.com (Settings → API Keys).
+2. Add this environment variable — locally in `.env.local`, and in Vercel
+   under **Settings → Environment Variables** (Production + Preview):
+
+   | Name | Value |
+   |---|---|
+   | `ANTHROPIC_API_KEY` | the API key from the Anthropic console |
+
+3. Redeploy. Until `ANTHROPIC_API_KEY` is set, the tab is still visible to
+   allowlisted brokers but generating a draft returns an error instead of
+   crashing anything else in the app.
+
+Each scenario (starting with the Deal Note Organizer) lives in its own file
+under `lib/prompts/` — adding a new scenario later means adding a new prompt
+file and a new entry in `app/api/email-assistant/generate/route.ts`'s
+`SCENARIOS` map, not editing the existing one.
+
 ## Data safety: concurrent editing + backups
 
 The tracker is built for the whole team to use at the same time. Each change

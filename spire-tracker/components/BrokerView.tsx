@@ -1,16 +1,17 @@
 "use client";
 import { useState } from "react";
 import { TrackerDB, Deal, DocStatus, WorkloadStatus, ClientSource, ContactLog } from "@/lib/types";
-import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES } from "@/lib/constants";
+import { ACTIVE_STAGES, STAGES, CONTACT_TYPES, OUTCOMES, DOC_STATUSES, TIME_SPENT_OPTIONS, BOTTLENECK_DAYS, CLIENT_SOURCES, EMAIL_ASSISTANT_BROKERS } from "@/lib/constants";
 import { uid, todayISO, daysBetween, weekRange, nowISO, daysAgo, totalMinutesForDeal } from "@/lib/utils";
 import { notifyEscalation } from "@/lib/api";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import TimeEntriesModal from "./TimeEntriesModal";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
+import EmailAssistant from "./EmailAssistant";
 import type { Mutate } from "@/app/page";
 
-type Tab = "log" | "deals" | "completed" | "clients" | "capacity";
+type Tab = "log" | "deals" | "completed" | "clients" | "capacity" | "email";
 
 export default function BrokerView({
   db,
@@ -35,6 +36,7 @@ export default function BrokerView({
   const myLogsThisWeek = db.logs.filter((l) => l.broker === broker && l.date >= wr.start && l.date <= wr.end);
   const escCount = myOpenDeals.filter((d) => d.escalation).length;
   const bottleneckCount = myOpenDeals.filter((d) => daysBetween(d.stageEnteredDate, todayISO()) > BOTTLENECK_DAYS).length;
+  const canUseEmailAssistant = EMAIL_ASSISTANT_BROKERS.some((n) => n.toLowerCase() === broker.toLowerCase());
 
   function clientName(id: string) {
     return db.clients.find((c) => c.id === id)?.name ?? "(unknown client)";
@@ -78,6 +80,9 @@ export default function BrokerView({
         <div className={`tab ${tab === "completed" ? "active" : ""}`} onClick={() => setTab("completed")}>Completed{myCompletedDeals.length ? ` (${myCompletedDeals.length})` : ""}</div>
         <div className={`tab ${tab === "clients" ? "active" : ""}`} onClick={() => setTab("clients")}>Clients</div>
         <div className={`tab ${tab === "capacity" ? "active" : ""}`} onClick={() => setTab("capacity")}>Weekly Capacity</div>
+        {canUseEmailAssistant && (
+          <div className={`tab ${tab === "email" ? "active" : ""}`} onClick={() => setTab("email")}>Email Assistant</div>
+        )}
       </div>
 
       {tab === "log" && (
@@ -135,6 +140,7 @@ export default function BrokerView({
       )}
       {tab === "clients" && <ClientsTab db={db} mutate={mutate} myClients={myClients} />}
       {tab === "capacity" && <CapacityTab db={db} mutate={mutate} broker={broker} />}
+      {tab === "email" && canUseEmailAssistant && <EmailAssistant />}
     </>
   );
 }

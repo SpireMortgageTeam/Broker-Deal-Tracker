@@ -1,0 +1,32 @@
+import { NextRequest, NextResponse } from "next/server";
+import { generateEmailDraft } from "@/lib/claude";
+import { DEAL_NOTE_ORGANIZER_PROMPT } from "@/lib/prompts/dealNoteOrganizer";
+
+// Scenario key -> system prompt. As more scenarios are migrated from the old
+// custom GPTs, add another entry here rather than growing one shared prompt —
+// each request only ever sends the ONE scenario's rules to the model.
+const SCENARIOS: Record<string, string> = {
+  "deal-note-organizer": DEAL_NOTE_ORGANIZER_PROMPT,
+};
+
+// Already covered by proxy.ts's session-cookie gate (same as every other
+// /api/* route in this app) — no separate auth needed here.
+export async function POST(request: NextRequest) {
+  try {
+    const { scenario, notes } = await request.json();
+
+    const systemPrompt = SCENARIOS[scenario];
+    if (!systemPrompt) {
+      return NextResponse.json({ ok: false, error: "Unknown scenario" }, { status: 400 });
+    }
+    if (typeof notes !== "string" || !notes.trim()) {
+      return NextResponse.json({ ok: false, error: "Notes are required" }, { status: 400 });
+    }
+
+    const result = await generateEmailDraft(systemPrompt, notes);
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error("email-assistant/generate failed", err);
+    return NextResponse.json({ ok: false, error: "generation failed" }, { status: 200 });
+  }
+}
