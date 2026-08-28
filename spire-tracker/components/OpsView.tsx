@@ -145,8 +145,11 @@ function BackupsPanel({ db }: { db: TrackerDB }) {
 function Coaching({ db }: { db: TrackerDB }) {
   const [brokerF, setBrokerF] = useState("");
   const [range, setRange] = useState<"this" | "last" | "30" | "all">("this");
-  const [category, setCategory] = useState<"all" | "new" | "followup" | "deal">("all");
-  const [typeF, setTypeF] = useState<string>("all");
+  const [catSel, setCatSel] = useState<string[]>([]);
+  const [typeSel, setTypeSel] = useState<string[]>([]);
+  const toggle = (arr: string[], set: (v: string[]) => void, val: string) =>
+    set(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
+  const CAT_OPTS: [string, string][] = [["new", "New origination"], ["followup", "Existing follow-ups"], ["deal", "Active deal time"]];
   const [sortKey, setSortKey] = useState<string | null>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const handleSort = makeSortHandler(sortKey, setSortKey, sortDir, setSortDir);
@@ -173,8 +176,8 @@ function Coaching({ db }: { db: TrackerDB }) {
   const filtered = db.logs.filter((l) => {
     if (brokerF && l.broker !== brokerF) return false;
     if (dateBounded && !(l.date >= start && l.date <= end)) return false;
-    if (category !== "all" && catOf(l) !== category) return false;
-    if (typeF !== "all" && l.type !== typeF) return false;
+    if (catSel.length && !catSel.includes(catOf(l))) return false;
+    if (typeSel.length && !typeSel.includes(l.type)) return false;
     return true;
   });
 
@@ -217,23 +220,28 @@ function Coaching({ db }: { db: TrackerDB }) {
               <option value="all">All time</option>
             </select>
           </div>
-          <div className="field">
-            <label>Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value as "all" | "new" | "followup" | "deal")}>
-              <option value="all">All categories</option>
-              <option value="new">New origination</option>
-              <option value="followup">Existing follow-ups</option>
-              <option value="deal">Active deal time</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Activity type</label>
-            <select value={typeF} onChange={(e) => setTypeF(e.target.value)}>
-              <option value="all">All types</option>
-              {CONTACT_TYPES.map((t) => <option key={t}>{t}</option>)}
-            </select>
+        </div>
+        <div className="field">
+          <label>Category</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+            {CAT_OPTS.map(([val, lbl]) => (
+              <label key={val} className="checkrow" style={{ textTransform: "none", fontWeight: 500, color: "var(--charcoal)" }}>
+                <input type="checkbox" checked={catSel.includes(val)} onChange={() => toggle(catSel, setCatSel, val)} /> {lbl}
+              </label>
+            ))}
           </div>
         </div>
+        <div className="field">
+          <label>Activity type</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+            {CONTACT_TYPES.map((t) => (
+              <label key={t} className="checkrow" style={{ textTransform: "none", fontWeight: 500, color: "var(--charcoal)" }}>
+                <input type="checkbox" checked={typeSel.includes(t)} onChange={() => toggle(typeSel, setTypeSel, t)} /> {t}
+              </label>
+            ))}
+          </div>
+        </div>
+        <p className="muted" style={{ margin: 0, fontSize: 12 }}>Leave a group fully unchecked to include all of it.</p>
       </div>
 
       <div className="statgrid">
@@ -255,7 +263,7 @@ function Coaching({ db }: { db: TrackerDB }) {
       )}
 
       <div className="card">
-        <div className="section-title"><h3>By broker</h3><span className="muted">{rangeLabel}{category !== "all" ? ` · ${catLabel(category)}` : ""}</span></div>
+        <div className="section-title"><h3>By broker</h3><span className="muted">{rangeLabel}{catSel.length ? ` · ${catSel.map(catLabel).join(", ")}` : ""}</span></div>
         <div className="table-wrap">
           <table>
             <thead><tr>
