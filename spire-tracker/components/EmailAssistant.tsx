@@ -10,6 +10,11 @@ type Parsed =
   | { kind: "raw"; text: string };
 
 const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const BOLD_RE = /\*\*([^*]+)\*\*/g;
+// Matches EITHER a link OR bold text, so a single left-to-right scan can
+// interleave both into the right order (used for on-screen rendering).
+const INLINE_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*/g;
+const HEADING_RE = /^#{1,6}\s+(.*)$/;
 
 // Splits an assistant reply on the "# Client-Facing Email" / "# Internal
 // Underwriting Notes" headers the prompt asks for. If the model instead came
@@ -32,44 +37,73 @@ function parseAssistant(text: string): Parsed {
   return { kind: "raw", text: text.trim() };
 }
 
-// Renders "[label](https://...)" markdown links as real clickable <a> tags —
-// the prompt's own rules say to use markdown links, but plain text can't
-// render them, so without this staff would see literal bracket syntax.
-function renderWithLinks(text: string) {
+// Renders "[label](url)" as a real link and "**text**" as real bold within a
+// single line — the model uses both, and plain text can't show either.
+function renderInline(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
-  const re = new RegExp(LINK_RE);
+  const re = new RegExp(INLINE_RE); // fresh instance — avoids stale lastIndex across calls
   while ((match = re.exec(text))) {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    nodes.push(
-      <a
-        key={key++}
-        href={match[2]}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: "var(--charcoal)", fontWeight: 600 }}
-      >
-        {match[1]}
-      </a>
-    );
+    if (match[1] !== undefined) {
+      nodes.push(
+        <a
+          key={key++}
+          href={match[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "var(--charcoal)", fontWeight: 600 }}
+        >
+          {match[1]}
+        </a>
+      );
+    } else if (match[2] !== undefined) {
+      nodes.push(<strong key={key++}>{match[2]}</strong>);
+    }
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
   return nodes;
 }
 
-// Converts the same markdown links (and line breaks) into real HTML, so the
-// copy button can hand the email client an actual hyperlink instead of
-// "[Apply Now](https://...)" as literal text.
+// Renders a full block of text line by line, so a "## Heading" line (the
+// underwriting-notes format) becomes a real bold heading instead of showing
+// its hash marks, with normal lines passed through renderInline.
+function renderBlock(text: string): React.ReactNode[] {
+  const lines = text.split("\n");
+  const out: React.ReactNode[] = [];
+  lines.forEach((line, i) => {
+    const heading = line.match(HEADING_RE);
+    if (heading) {
+      out.push(
+        <div key={`h${i}`} style={{ fontWeight: 700, marginTop: i === 0 ? 0 : 10, marginBottom: 2 }}>
+          {renderInline(heading[1])}
+        </div>
+      );
+    } else {
+      out.push(<span key={`l${i}`}>{renderInline(line)}</span>);
+      if (i < lines.length - 1) out.push(<br key={`b${i}`} />);
+    }
+  });
+  return out;
+}
+
+function inlineToHtml(s: string): string {
+  return s.replace(LINK_RE, '<a href="$2">$1</a>').replace(BOLD_RE, "<strong>$1</strong>");
+}
+
+// Converts the same markdown (links, bold, ## headings, line breaks) into
+// real HTML, so the copy button hands the email client actual formatting
+// instead of literal markdown syntax.
 function toEmailHtml(text: string): string {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  const linked = escaped.replace(LINK_RE, '<a href="$2">$1</a>');
-  return linked.replace(/\n/g, "<br>");
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const lines = escaped.split("\n").map((line) => {
+    const heading = line.match(HEADING_RE);
+    return heading ? `<strong>${inlineToHtml(heading[1])}</strong>` : inlineToHtml(line);
+  });
+  return lines.join("<br>");
 }
 
 async function copy(text: string, label: string) {
@@ -105,18 +139,14 @@ function AssistantBubble({ text }: { text: string }) {
             <h3>Client-facing email</h3>
             <button className="btn small secondary" onClick={() => copy(parsed.clientEmail, "Email")}>Copy</button>
           </div>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>
-            {renderWithLinks(parsed.clientEmail)}
-          </div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.6 }}>{renderBlock(parsed.clientEmail)}</div>
         </div>
         <div className="card">
           <div className="section-title">
             <h3>Internal underwriting notes</h3>
             <button className="btn small secondary" onClick={() => copy(parsed.underwritingNotes, "Notes")}>Copy</button>
           </div>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>
-            {renderWithLinks(parsed.underwritingNotes)}
-          </div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.6 }}>{renderBlock(parsed.underwritingNotes)}</div>
         </div>
       </>
     );
@@ -127,13 +157,13 @@ function AssistantBubble({ text }: { text: string }) {
         <p className="muted" style={{ marginTop: 0, marginBottom: 8 }}>
           Needs a bit more info — reply in the box below and it'll pick up from here.
         </p>
-        <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{renderWithLinks(parsed.text)}</div>
+        <div style={{ fontSize: 13.5, lineHeight: 1.6 }}>{renderBlock(parsed.text)}</div>
       </div>
     );
   }
   return (
     <div className="card">
-      <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{renderWithLinks(parsed.text)}</div>
+      <div style={{ fontSize: 13.5, lineHeight: 1.6 }}>{renderBlock(parsed.text)}</div>
     </div>
   );
 }
