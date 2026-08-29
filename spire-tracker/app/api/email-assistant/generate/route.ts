@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateEmailDraft } from "@/lib/claude";
+import { generateEmailDraft, ChatMessage } from "@/lib/claude";
 import { DEAL_NOTE_ORGANIZER_PROMPT } from "@/lib/prompts/dealNoteOrganizer";
 
 // Scenario key -> system prompt. As more scenarios are migrated from the old
@@ -13,17 +13,26 @@ const SCENARIOS: Record<string, string> = {
 // /api/* route in this app) — no separate auth needed here.
 export async function POST(request: NextRequest) {
   try {
-    const { scenario, notes } = await request.json();
+    const { scenario, messages } = await request.json();
 
     const systemPrompt = SCENARIOS[scenario];
     if (!systemPrompt) {
       return NextResponse.json({ ok: false, error: "Unknown scenario" }, { status: 400 });
     }
-    if (typeof notes !== "string" || !notes.trim()) {
-      return NextResponse.json({ ok: false, error: "Notes are required" }, { status: 400 });
+    if (!Array.isArray(messages) || !messages.length) {
+      return NextResponse.json({ ok: false, error: "Messages are required" }, { status: 400 });
+    }
+    const clean: ChatMessage[] = messages
+      .filter(
+        (m: any) =>
+          m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim()
+      )
+      .map((m: any) => ({ role: m.role, content: m.content }));
+    if (!clean.length) {
+      return NextResponse.json({ ok: false, error: "Messages are required" }, { status: 400 });
     }
 
-    const result = await generateEmailDraft(systemPrompt, notes);
+    const result = await generateEmailDraft(systemPrompt, clean);
     return NextResponse.json(result);
   } catch (err) {
     console.error("email-assistant/generate failed", err);
