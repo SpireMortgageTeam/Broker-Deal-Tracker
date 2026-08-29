@@ -61,7 +61,7 @@ export const CLIENT_SOURCES: ClientSource[] = ["New Lead", "Pre-Approval Revival
 // tested. Add a name here to give someone else access — remove this
 // allowlist entirely (and the check that uses it) once it's ready for the
 // whole team.
-export const EMAIL_ASSISTANT_BROKERS: string[] = ["Prashant"];
+export const EMAIL_ASSISTANT_BROKERS: string[] = ["Prashant Chudasama"];
 
 // Days a deal can sit at one stage before it's flagged as a bottleneck.
 // Change this one number if 7 days doesn't match your team's reality.
