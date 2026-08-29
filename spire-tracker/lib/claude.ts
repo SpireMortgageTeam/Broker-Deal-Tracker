@@ -12,22 +12,28 @@ export function isClaudeConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 /**
- * Sends one scenario's system prompt plus the staff member's pasted notes to
- * Claude and returns the raw response text. Returns a result object rather
- * than throwing, so a bad response can be shown in the UI instead of
- * crashing the request.
+ * Sends one scenario's system prompt plus the full conversation so far to
+ * Claude and returns the raw response text. Supports multi-turn exchanges —
+ * e.g. the model asking clarifying questions and the staff member answering
+ * them in a follow-up message — by passing the growing message history back
+ * in each time. Returns a result object rather than throwing, so a bad
+ * response can be shown in the UI instead of crashing the request.
  */
 export async function generateEmailDraft(
   systemPrompt: string,
-  userNotes: string
+  messages: ChatMessage[]
 ): Promise<{ ok: boolean; text?: string; error?: string }> {
   if (!isClaudeConfigured()) {
     return { ok: false, error: "ANTHROPIC_API_KEY is not set" };
   }
-  const notes = userNotes.trim();
-  if (!notes) {
-    return { ok: false, error: "No notes provided" };
+  if (!messages.length) {
+    return { ok: false, error: "No messages provided" };
   }
 
   try {
@@ -42,7 +48,7 @@ export async function generateEmailDraft(
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system: systemPrompt,
-        messages: [{ role: "user", content: notes }],
+        messages,
       }),
     });
 
