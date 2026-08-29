@@ -120,3 +120,60 @@ export default function EmailAssistant() {
   }
 
   function startOver() {
+    setMessages([]);
+    setInput("");
+    setError("");
+  }
+
+  return (
+    <>
+      <div className="card">
+        <div className="section-title">
+          <h3>Deal Note Organizer + Client Recap</h3>
+          {started ? (
+            <button className="btn small secondary" onClick={startOver}>New conversation</button>
+          ) : (
+            <span className="muted">Paste your call notes — get a client email and underwriting notes</span>
+          )}
+        </div>
+        {!started && (
+          <p className="muted" style={{ marginTop: -6 }}>
+            If anything's missing (income, down payment, timeline, etc.) it'll ask before writing anything —
+            just answer right here and it'll continue.
+          </p>
+        )}
+      </div>
+
+      {messages.map((m, i) =>
+        m.role === "user" ? (
+          <div key={i} className="card" style={{ boxShadow: "none" }}>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>YOU</div>
+            <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{m.content}</div>
+          </div>
+        ) : (
+          <AssistantBubble key={i} text={m.content} />
+        )
+      )}
+
+      <div className="card">
+        <div className="field">
+          <label>{started ? "Your reply" : "Call notes / transcript"}</label>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={
+              started
+                ? "Answer the questions above, or ask for a change…"
+                : "Paste what was discussed on the call — goal, timeline, income, down payment, property, etc."
+            }
+            style={{ minHeight: started ? 80 : 180 }}
+          />
+        </div>
+        <button className="btn" onClick={send} disabled={loading}>
+          {loading ? "Generating…" : started ? "Send" : "Generate"}
+        </button>
+        {error && <div className="login-error" style={{ marginTop: 10 }}>{error}</div>}
+      </div>
+    </>
+  );
+}
