@@ -9,6 +9,8 @@ type Parsed =
   | { kind: "questions"; text: string }
   | { kind: "raw"; text: string };
 
+const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+
 // Splits an assistant reply on the "# Client-Facing Email" / "# Internal
 // Underwriting Notes" headers the prompt asks for. If the model instead came
 // back with clarifying questions (per the prompt's "never guess" core rule),
@@ -30,12 +32,66 @@ function parseAssistant(text: string): Parsed {
   return { kind: "raw", text: text.trim() };
 }
 
+// Renders "[label](https://...)" markdown links as real clickable <a> tags —
+// the prompt's own rules say to use markdown links, but plain text can't
+// render them, so without this staff would see literal bracket syntax.
+function renderWithLinks(text: string) {
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  const re = new RegExp(LINK_RE);
+  while ((match = re.exec(text))) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    nodes.push(
+      <a
+        key={key++}
+        href={match[2]}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "var(--charcoal)", fontWeight: 600 }}
+      >
+        {match[1]}
+      </a>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}
+
+// Converts the same markdown links (and line breaks) into real HTML, so the
+// copy button can hand the email client an actual hyperlink instead of
+// "[Apply Now](https://...)" as literal text.
+function toEmailHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const linked = escaped.replace(LINK_RE, '<a href="$2">$1</a>');
+  return linked.replace(/\n/g, "<br>");
+}
+
 async function copy(text: string, label: string) {
   try {
-    await navigator.clipboard.writeText(text);
+    const ClipboardItemCtor = (window as any).ClipboardItem;
+    if (navigator.clipboard?.write && ClipboardItemCtor) {
+      const item = new ClipboardItemCtor({
+        "text/plain": new Blob([text], { type: "text/plain" }),
+        "text/html": new Blob([toEmailHtml(text)], { type: "text/html" }),
+      });
+      await navigator.clipboard.write([item]);
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
     showToast(`${label} copied`);
   } catch {
-    showToast("Couldn't copy — select and copy manually");
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`${label} copied`);
+    } catch {
+      showToast("Couldn't copy — select and copy manually");
+    }
   }
 }
 
@@ -49,14 +105,18 @@ function AssistantBubble({ text }: { text: string }) {
             <h3>Client-facing email</h3>
             <button className="btn small secondary" onClick={() => copy(parsed.clientEmail, "Email")}>Copy</button>
           </div>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{parsed.clientEmail}</div>
+          <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>
+            {renderWithLinks(parsed.clientEmail)}
+          </div>
         </div>
         <div className="card">
           <div className="section-title">
             <h3>Internal underwriting notes</h3>
             <button className="btn small secondary" onClick={() => copy(parsed.underwritingNotes, "Notes")}>Copy</button>
           </div>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{parsed.underwritingNotes}</div>
+          <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>
+            {renderWithLinks(parsed.underwritingNotes)}
+          </div>
         </div>
       </>
     );
@@ -67,13 +127,13 @@ function AssistantBubble({ text }: { text: string }) {
         <p className="muted" style={{ marginTop: 0, marginBottom: 8 }}>
           Needs a bit more info — reply in the box below and it'll pick up from here.
         </p>
-        <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{parsed.text}</div>
+        <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{renderWithLinks(parsed.text)}</div>
       </div>
     );
   }
   return (
     <div className="card">
-      <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{parsed.text}</div>
+      <div style={{ whiteSpace: "pre-wrap", fontSize: 13.5, lineHeight: 1.6 }}>{renderWithLinks(parsed.text)}</div>
     </div>
   );
 }
