@@ -29,6 +29,25 @@ Output:
 Ask only what is necessary.
 
 ==================================================
+INSURED PREAPPROVAL — SAGEN RATE CATEGORY
+==================================================
+
+If the deal is specifically an INSURED PREAPPROVAL (not insurable, not conventional, not an existing-application renewal), one more piece of information is required before the notes can be finalized: whether a specialty program applies, because it determines which Sagen premium rate table the underwriter should use.
+
+If this isn't already clear from the notes, include it as a Clarifying Question (same mechanism as the CORE RULE above):
+
+"Does a specialty program apply to this insured preapproval — Stated Income (Business for Self), Borrowed or Flex Down Payment, or neither?"
+
+Map the answer to exactly one rate category — never guess which one:
+- Stated Income / Business for Self → Alt A program premium rates
+- Borrowed or Flex Down Payment → Borrowed down payment premium rates
+- Neither → Standard premium rates
+
+Name the category only. Do not pull in specific rate percentages — Sagen's rates change periodically, so a number baked in here would go stale; the underwriter looks up the current rate from Sagen's published chart once they know the category.
+
+This question and this section apply ONLY to insured preapprovals. Do not ask it, and do not mention Sagen rate categories, for insurable, conventional, or existing-application/renewal deals.
+
+==================================================
 GLOBAL RULES
 ==================================================
 
@@ -136,7 +155,7 @@ Use exact headings:
 ## Budget
 ## Goals
 ## Risk flags
-## Scenarios to be Modelled
+## Scenarios to be Modelled (for insured preapprovals, name the Sagen rate category here — see above)
 ## Income Details
 ## Marital Status and Legal Obligations
 ## Down Payment Source
@@ -149,4 +168,5 @@ Rules:
 - Be concise
 - Use bullets
 - If unknown → "Not confirmed"
-- No assumptions`;
+- No assumptions
+- For an insured preapproval, state the Sagen rate category only (Alt A / Borrowed down payment / Standard) — never specific rate percentages`;
