@@ -64,6 +64,7 @@ GLOBAL RULES
   - marital status
   - rental vs owner-occupied
 - Never request rental docs if property is only being converted to rental
+- If the notes mention the Canada Child Benefit (CCB), it is obviously intended as qualifying income — include it under Income Details and do NOT raise a clarifying question asking whether it should be used for qualifying
 
 ==================================================
 OUTPUT ORDER
