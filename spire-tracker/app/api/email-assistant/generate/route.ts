@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateEmailDraft, ChatMessage } from "@/lib/claude";
 import { DEAL_NOTE_ORGANIZER_PROMPT } from "@/lib/prompts/dealNoteOrganizer";
+import { PREAPPROVAL_GENERATOR_PROMPT } from "@/lib/prompts/preapprovalGenerator";
 
 // Scenario key -> system prompt. As more scenarios are migrated from the old
 // custom GPTs, add another entry here rather than growing one shared prompt —
-// each request only ever sends the ONE scenario's rules to the model.
+// each request only ever sends the ONE scenario's rules to the model. Keep
+// this in sync with EMAIL_ASSISTANT_SCENARIOS in lib/constants.ts (the ids
+// the dropdown sends).
 const SCENARIOS: Record<string, string> = {
   "deal-note-organizer": DEAL_NOTE_ORGANIZER_PROMPT,
+  "preapproval-generator": PREAPPROVAL_GENERATOR_PROMPT,
 };
 
 // Already covered by proxy.ts's session-cookie gate (same as every other

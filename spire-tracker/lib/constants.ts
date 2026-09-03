@@ -57,6 +57,37 @@ export const DOC_STATUSES: DocStatus[] = ["Complete", "Partial", "None"];
 
 export const CLIENT_SOURCES: ClientSource[] = ["New Lead", "Pre-Approval Revival", "Renewal", "Ownwell"];
 
+// Email Assistant scenarios, for the dropdown in components/EmailAssistant.tsx.
+// This is the client-safe side (labels/copy only) — the actual system prompt
+// text lives server-side in lib/prompts/*.ts and is looked up by `id` in
+// app/api/email-assistant/generate/route.ts. Keep the `id`s in sync between
+// the two.
+export const EMAIL_ASSISTANT_SCENARIOS: {
+  id: string;
+  label: string;
+  tagline: string;
+  inputLabel: string;
+  placeholder: string;
+  helper: string;
+}[] = [
+  {
+    id: "deal-note-organizer",
+    label: "Deal Note Organizer + Client Recap",
+    tagline: "Paste your call notes — get a client email and underwriting notes",
+    inputLabel: "Call notes / transcript",
+    placeholder: "Paste what was discussed on the call — goal, timeline, income, down payment, property, etc.",
+    helper: "If anything's missing (income, down payment, timeline, etc.) it'll ask before writing anything — just answer right here and it'll continue.",
+  },
+  {
+    id: "preapproval-generator",
+    label: "Preapproval Generator",
+    tagline: "Describe the scenario — get a ready-to-send pre-approval email",
+    inputLabel: "Scenario details",
+    placeholder: "Pre-approval type, purchase price / down payment / amortization for each scenario, key conditions, and rate assumptions.",
+    helper: "It'll ask for anything missing from those (pre-approval type, scenarios, conditions, rate assumptions) before generating the email — just answer right here and it'll continue.",
+  },
+];
+
 // Days a deal can sit at one stage before it's flagged as a bottleneck.
 // Change this one number if 7 days doesn't match your team's reality.
 export const BOTTLENECK_DAYS = 7;

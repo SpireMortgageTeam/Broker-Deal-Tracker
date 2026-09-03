@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { EMAIL_ASSISTANT_SCENARIOS } from "@/lib/constants";
 import { showToast } from "./Toast";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -169,12 +170,24 @@ function AssistantBubble({ text }: { text: string }) {
 }
 
 export default function EmailAssistant() {
+  const [scenarioId, setScenarioId] = useState(EMAIL_ASSISTANT_SCENARIOS[0].id);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const scenario = EMAIL_ASSISTANT_SCENARIOS.find((s) => s.id === scenarioId) ?? EMAIL_ASSISTANT_SCENARIOS[0];
   const started = messages.length > 0;
+
+  // Switching scenarios mid-conversation would mix one tool's context into
+  // another's system prompt, so it starts a fresh conversation — same as
+  // clicking "New conversation".
+  function changeScenario(id: string) {
+    setScenarioId(id);
+    setMessages([]);
+    setInput("");
+    setError("");
+  }
 
   // Only commits the new turn to state once a reply comes back successfully —
   // that keeps the message history strictly alternating user/assistant, which
@@ -183,7 +196,7 @@ export default function EmailAssistant() {
   async function send() {
     const text = input.trim();
     if (!text) {
-      showToast(started ? "Type a reply first" : "Paste in your call notes first");
+      showToast(started ? "Type a reply first" : `Fill in ${scenario.inputLabel.toLowerCase()} first`);
       return;
     }
     const next: ChatMessage[] = [...messages, { role: "user", content: text }];
@@ -193,7 +206,7 @@ export default function EmailAssistant() {
       const res = await fetch("/api/email-assistant/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario: "deal-note-organizer", messages: next }),
+        body: JSON.stringify({ scenario: scenarioId, messages: next }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -218,18 +231,25 @@ export default function EmailAssistant() {
   return (
     <>
       <div className="card">
+        <div className="field" style={{ marginBottom: started ? 0 : 14 }}>
+          <label>Tool</label>
+          <select value={scenarioId} onChange={(e) => changeScenario(e.target.value)}>
+            {EMAIL_ASSISTANT_SCENARIOS.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </div>
         <div className="section-title">
-          <h3>Deal Note Organizer + Client Recap</h3>
+          <h3>{scenario.label}</h3>
           {started ? (
             <button className="btn small secondary" onClick={startOver}>New conversation</button>
           ) : (
-            <span className="muted">Paste your call notes — get a client email and underwriting notes</span>
+            <span className="muted">{scenario.tagline}</span>
           )}
         </div>
         {!started && (
           <p className="muted" style={{ marginTop: -6 }}>
-            If anything's missing (income, down payment, timeline, etc.) it'll ask before writing anything —
-            just answer right here and it'll continue.
+            {scenario.helper}
           </p>
         )}
       </div>
@@ -247,15 +267,11 @@ export default function EmailAssistant() {
 
       <div className="card">
         <div className="field">
-          <label>{started ? "Your reply" : "Call notes / transcript"}</label>
+          <label>{started ? "Your reply" : scenario.inputLabel}</label>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={
-              started
-                ? "Answer the questions above, or ask for a change…"
-                : "Paste what was discussed on the call — goal, timeline, income, down payment, property, etc."
-            }
+            placeholder={started ? "Answer the questions above, or ask for a change…" : scenario.placeholder}
             style={{ minHeight: started ? 80 : 180 }}
           />
         </div>
