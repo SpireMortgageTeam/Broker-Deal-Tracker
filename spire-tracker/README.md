@@ -111,11 +111,10 @@ Setup is two parts — configure the app, and add the email credentials.
 
 ## Email Assistant (Claude API)
 
-A tab that turns pasted call notes into a client-facing recap email plus
-internal underwriting notes, replacing the team's old ChatGPT custom GPTs for
-this. It's restricted to specific broker names (see `EMAIL_ASSISTANT_BROKERS`
-in `lib/constants.ts`) while it's being tested — edit that list to add more
-staff once it's ready to roll out further.
+A tool under the **Resources** tab on the main landing page (available to the
+whole team, not tied to any one broker) that turns pasted call notes into a
+client-facing recap email plus internal underwriting notes, replacing the
+team's old ChatGPT custom GPTs for this.
 
 Setup:
 
