@@ -92,4 +92,4 @@ export interface TrackerDB {
   opsRecipients: string[]; // email addresses that get escalation alerts
 }
 
-export type Role = "broker" | "ops" | null;
+export type Role = "broker" | "ops" | "resources" | null;

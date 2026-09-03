@@ -6,6 +6,7 @@ import { loadAll, persistDiff, logout } from "@/lib/api";
 import RoleScreen from "@/components/RoleScreen";
 import BrokerView from "@/components/BrokerView";
 import OpsView from "@/components/OpsView";
+import ResourcesView from "@/components/ResourcesView";
 import Toast from "@/components/Toast";
 
 export type Mutate = <K extends keyof TrackerDB>(
@@ -71,8 +72,10 @@ export default function Page() {
             <span className="who">
               {role === "broker" ? (
                 <>Broker view · <b>{broker}</b></>
-              ) : (
+              ) : role === "ops" ? (
                 <>Ops Manager view · <b>all brokers</b></>
+              ) : (
+                <>Resources</>
               )}
             </span>
           )}
@@ -90,10 +93,12 @@ export default function Page() {
           brokers={db.brokers}
           onSelectBroker={(name) => { setRole("broker"); setBroker(name); }}
           onSelectOps={() => setRole("ops")}
+          onSelectResources={() => setRole("resources")}
         />
       )}
       {role === "broker" && broker && <BrokerView db={db} mutate={mutate} broker={broker} />}
       {role === "ops" && <OpsView db={db} mutate={mutate} />}
+      {role === "resources" && <ResourcesView />}
 
       <Toast />
     </div>

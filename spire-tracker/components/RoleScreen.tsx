@@ -5,10 +5,12 @@ export default function RoleScreen({
   brokers,
   onSelectBroker,
   onSelectOps,
+  onSelectResources,
 }: {
   brokers: string[];
   onSelectBroker: (name: string) => void;
   onSelectOps: () => void;
+  onSelectResources: () => void;
 }) {
   const [showOpsPrompt, setShowOpsPrompt] = useState(false);
   const [opsPassword, setOpsPassword] = useState("");
@@ -60,12 +62,17 @@ export default function RoleScreen({
       </div>
       <div style={{ margin: "26px 0 10px", borderTop: "1px solid var(--lbg)", paddingTop: 20 }}>
         {!showOpsPrompt ? (
-          <div
-            className="rolecard"
-            style={{ display: "inline-block", background: "var(--charcoal)", color: "#fff" }}
-            onClick={() => setShowOpsPrompt(true)}
-          >
-            Ops Manager
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            <div
+              className="rolecard"
+              style={{ background: "var(--charcoal)", color: "#fff" }}
+              onClick={() => setShowOpsPrompt(true)}
+            >
+              Ops Manager
+            </div>
+            <div className="rolecard" onClick={onSelectResources}>
+              Resources
+            </div>
           </div>
         ) : (
           <form onSubmit={submitOpsPassword} style={{ maxWidth: 300, margin: "0 auto", textAlign: "left" }}>
