@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateEmailDraft, ChatMessage } from "@/lib/claude";
 import { DEAL_NOTE_ORGANIZER_PROMPT } from "@/lib/prompts/dealNoteOrganizer";
 import { PREAPPROVAL_GENERATOR_PROMPT } from "@/lib/prompts/preapprovalGenerator";
+import { DEAL_SAVER_PROMPT } from "@/lib/prompts/dealSaver";
 
 // Scenario key -> system prompt. As more scenarios are migrated from the old
 // custom GPTs, add another entry here rather than growing one shared prompt —
@@ -11,6 +12,7 @@ import { PREAPPROVAL_GENERATOR_PROMPT } from "@/lib/prompts/preapprovalGenerator
 const SCENARIOS: Record<string, string> = {
   "deal-note-organizer": DEAL_NOTE_ORGANIZER_PROMPT,
   "preapproval-generator": PREAPPROVAL_GENERATOR_PROMPT,
+  "deal-saver": DEAL_SAVER_PROMPT,
 };
 
 // Already covered by proxy.ts's session-cookie gate (same as every other

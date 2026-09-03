@@ -86,6 +86,14 @@ export const EMAIL_ASSISTANT_SCENARIOS: {
     placeholder: "Pre-approval type, purchase price / down payment / amortization for each scenario, key conditions, and rate assumptions.",
     helper: "It'll ask for anything missing from those (pre-approval type, scenarios, conditions, rate assumptions) before generating the email — just answer right here and it'll continue.",
   },
+  {
+    id: "deal-saver",
+    label: "Spire Mortgage Deal Saver",
+    tagline: "Client's comparing another lender's rate — get a save-the-deal email",
+    inputLabel: "Situation details",
+    placeholder: "Property type (owner-occupied or rental), mortgage type (insured or conventional), mortgage amount, and the lender/rate they're considering.",
+    helper: "It'll ask for anything missing from those four before writing the comparison — just answer right here and it'll continue.",
+  },
 ];
 
 // Days a deal can sit at one stage before it's flagged as a bottleneck.
