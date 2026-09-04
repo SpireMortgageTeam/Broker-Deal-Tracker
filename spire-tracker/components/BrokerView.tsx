@@ -7,10 +7,11 @@ import { notifyEscalation } from "@/lib/api";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import TimeEntriesModal from "./TimeEntriesModal";
+import BrokerCommunities from "./BrokerCommunities";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
-type Tab = "log" | "deals" | "completed" | "clients" | "capacity";
+type Tab = "log" | "deals" | "completed" | "clients" | "capacity" | "communities";
 
 export default function BrokerView({
   db,
@@ -78,6 +79,7 @@ export default function BrokerView({
         <div className={`tab ${tab === "completed" ? "active" : ""}`} onClick={() => setTab("completed")}>Completed{myCompletedDeals.length ? ` (${myCompletedDeals.length})` : ""}</div>
         <div className={`tab ${tab === "clients" ? "active" : ""}`} onClick={() => setTab("clients")}>Clients</div>
         <div className={`tab ${tab === "capacity" ? "active" : ""}`} onClick={() => setTab("capacity")}>Weekly Capacity</div>
+        <div className={`tab ${tab === "communities" ? "active" : ""}`} onClick={() => setTab("communities")}>My Communities</div>
       </div>
 
       {tab === "log" && (
@@ -135,6 +137,7 @@ export default function BrokerView({
       )}
       {tab === "clients" && <ClientsTab db={db} mutate={mutate} myClients={myClients} />}
       {tab === "capacity" && <CapacityTab db={db} mutate={mutate} broker={broker} />}
+      {tab === "communities" && <BrokerCommunities db={db} mutate={mutate} broker={broker} />}
     </>
   );
 }

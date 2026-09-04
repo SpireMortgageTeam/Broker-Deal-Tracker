@@ -146,6 +146,35 @@ Reuses the same `ANTHROPIC_API_KEY` as the Email Assistant above — no
 additional setup once that's configured. The team headshots, logos, and
 fonts it needs ship in `public/insta-review/`.
 
+## Communities (migrated from Spire Community Tracker)
+
+Brokers each "own" a set of Trico show-home communities. Periodically a
+broker calls or visits a community and comes back with answers to a fixed
+relationship questionnaire — the latest answer to each question is that
+community's "intel" snapshot, and every call is also kept in a permanent
+call log. This used to live in a separate app (`spire-community-tracker`);
+it's now part of this one, under two tabs:
+
+- **My Communities** (Broker view) — the communities assigned to you, with
+  the intel grid and call-log entry.
+- **Communities** (Ops view) — every community, broker reassignment, and a
+  one-time **Import** button that pulls the old app's data across. Import
+  replaces community/intel/call-log data wholesale, so it's meant to run
+  once (re-running requires an explicit confirmation, since it discards any
+  edits made here since the last import).
+
+## Feature Sheets
+
+Also under **Resources**. Generates a co-branded, print-ready, one-page PDF
+mortgage feature sheet for a builder partner's sales centre — three price
+points, three down-payment scenarios (tiered minimum / 10% / 20%) computed
+with the correct Canadian semi-annual-compounding math and CMHC premium
+tiers, pulling the community's sales-associate contact straight from the
+Communities data above so it doesn't need retyping. Builders (name + logo)
+are saved once and reused across every sheet for that builder; the hero
+photo is uploaded fresh each time. No new environment variables — the PDF
+export runs entirely client-side.
+
 ## Data safety: concurrent editing + backups
 
 The tracker is built for the whole team to use at the same time. Each change

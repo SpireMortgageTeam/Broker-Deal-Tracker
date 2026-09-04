@@ -14,7 +14,19 @@ export type Mutate = <K extends keyof TrackerDB>(
   updater: (current: TrackerDB[K]) => TrackerDB[K]
 ) => Promise<void>;
 
-const EMPTY_DB: TrackerDB = { brokers: [], clients: [], logs: [], deals: [], capacity: [], brokerContacts: [], opsRecipients: [] };
+const EMPTY_DB: TrackerDB = {
+  brokers: [],
+  clients: [],
+  logs: [],
+  deals: [],
+  capacity: [],
+  brokerContacts: [],
+  opsRecipients: [],
+  communities: [],
+  communityIntel: [],
+  callLogs: [],
+  builders: [],
+};
 
 export default function Page() {
   const [db, setDb] = useState<TrackerDB>(EMPTY_DB);
@@ -34,6 +46,10 @@ export default function Page() {
           capacity: all.capacity || [],
           brokerContacts: all.brokerContacts || [],
           opsRecipients: all.opsRecipients || [],
+          communities: all.communities || [],
+          communityIntel: all.communityIntel || [],
+          callLogs: all.callLogs || [],
+          builders: all.builders || [],
         } as TrackerDB);
       } catch {
         /* leave EMPTY_DB; user sees an empty state rather than a crash */
@@ -98,7 +114,7 @@ export default function Page() {
       )}
       {role === "broker" && broker && <BrokerView db={db} mutate={mutate} broker={broker} />}
       {role === "ops" && <OpsView db={db} mutate={mutate} />}
-      {role === "resources" && <ResourcesView />}
+      {role === "resources" && <ResourcesView db={db} mutate={mutate} />}
 
       <Toast />
     </div>
