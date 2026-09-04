@@ -60,8 +60,8 @@ function renderInline(text: string): React.ReactNode[] {
           {match[1]}
         </a>
       );
-    } else if (match[2] !== undefined) {
-      nodes.push(<strong key={key++}>{match[2]}</strong>);
+    } else if (match[3] !== undefined) {
+      nodes.push(<strong key={key++}>{match[3]}</strong>);
     }
     lastIndex = match.index + match[0].length;
   }
