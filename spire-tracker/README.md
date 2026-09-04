@@ -135,6 +135,17 @@ under `lib/prompts/` — adding a new scenario later means adding a new prompt
 file and a new entry in `app/api/email-assistant/generate/route.ts`'s
 `SCENARIOS` map, not editing the existing one.
 
+## Insta Review
+
+Also under the **Resources** tab. Turns a pasted client review into an
+Instagram-ready post (one of five branded templates, square or story format,
+downloadable as a PNG) plus a matching caption in the Spire voice — replacing
+a manual Canva + copywriting process.
+
+Reuses the same `ANTHROPIC_API_KEY` as the Email Assistant above — no
+additional setup once that's configured. The team headshots, logos, and
+fonts it needs ship in `public/insta-review/`.
+
 ## Data safety: concurrent editing + backups
 
 The tracker is built for the whole team to use at the same time. Each change
