@@ -82,6 +82,109 @@ export interface CapacityCheckin {
   savedAt: string;
 }
 
+// ---------------------------------------------------------------------------
+// Community Tracker (migrated from the standalone spire-community-tracker
+// app — see /root/.claude/plans/composed-weaving-parrot.md for context).
+// Brokers each "own" a set of Trico show-home communities; periodically a
+// broker calls/visits and comes back with answers to a fixed questionnaire.
+// The latest answer to each question is the "current snapshot" (CommunityIntel);
+// every call is also kept in a permanent, append-only CallLog.
+// ---------------------------------------------------------------------------
+
+export type CommunityStatus = "Open" | "Coming Soon" | "Closed";
+export type PreferredContactMethod = "Email" | "Phone" | "Text" | "Mixed / no strong preference";
+export type CallSource = "Plaud" | "Manual notes" | "In-person" | "Other";
+
+export interface Associate {
+  name: string;
+  phone: string;
+  email: string;
+}
+
+export interface Community {
+  id: string;
+  name: string;
+  status: CommunityStatus;
+  city: string;
+  showhomeAddress: string;
+  showhomeModel: string;
+  showhomePhone: string;
+  areaManagerName: string;
+  areaManagerPhone: string;
+  areaManagerEmail: string;
+  associates: Associate[]; // 1-2 people, some communities run with two
+  newSAStartDate: string | null; // ISO date; set if a new sales associate is on probation
+  probationEndDate: string | null;
+  assignedBroker: string | null; // one of db.brokers, or null (e.g. Coming Soon)
+  spreadsheetNotes: string; // freeform carry-over text, e.g. "SH Closed", "Now Open!"
+  createdAt: string;
+}
+
+// The 20 questionnaire fields, grouped into 6 categories for display — see
+// lib/intelFields.ts for the category -> fields -> label mapping.
+export type IntelFieldKey =
+  | "pricePoints"
+  | "propertyTypes"
+  | "preferredContactMethod"
+  | "updateFrequency"
+  | "followUpExpectations"
+  | "sidewaysCommunication"
+  | "currentBuyerTypes"
+  | "sellingWell"
+  | "harderToMove"
+  | "financingObjections"
+  | "whereBuyersStuck"
+  | "fallClosingsWorried"
+  | "financingReviewNeeded"
+  | "appraisalValuationIssues"
+  | "challengingModelsLotsUpgrades"
+  | "whatWouldHelp"
+  | "toolsGuidesWishlist"
+  | "whereDroppedBall"
+  | "whatCouldBeBetter"
+  | "valuableExtensionVision";
+
+export interface IntelValue {
+  value: string;
+  updatedAt: string | null; // ISO date
+  updatedBy: string | null; // broker name (or "Ops")
+  callId: string | null; // which CallLog entry last set this value, if any
+}
+
+// One record per community — communityId is the identity. Fields live under
+// a nested "fields" map (rather than the source app's flat index-signature
+// shape) so this diffs/upserts cleanly through this app's per-record
+// persistDiff logic, same as every other hash collection here.
+export interface CommunityIntel {
+  communityId: string;
+  fields: Partial<Record<IntelFieldKey, IntelValue>>;
+}
+
+// Append-only log of every call/visit. Never edited after the fact (except
+// typo fixes).
+export interface CallLog {
+  id: string;
+  communityId: string;
+  broker: string;
+  date: string; // ISO date of the call
+  source: CallSource;
+  transcript: string; // pasted Plaud transcript or raw notes, optional
+  summary: string; // required short recap of the call
+  fieldsUpdated: IntelFieldKey[]; // which snapshot fields this call changed
+  createdAt: string; // ISO datetime
+}
+
+// ---------------------------------------------------------------------------
+// Feature Sheets (co-branded builder-partner mortgage sheets)
+// ---------------------------------------------------------------------------
+
+export interface Builder {
+  id: string;
+  name: string;
+  logo: string; // base64 data URL
+  brandColor?: string; // hex; falls back to the Atmosphere palette color
+}
+
 export interface TrackerDB {
   brokers: string[];
   clients: Client[];
@@ -90,6 +193,10 @@ export interface TrackerDB {
   capacity: CapacityCheckin[];
   brokerContacts: BrokerContact[]; // name -> email, for notifications
   opsRecipients: string[]; // email addresses that get escalation alerts
+  communities: Community[];
+  communityIntel: CommunityIntel[];
+  callLogs: CallLog[];
+  builders: Builder[];
 }
 
 export type Role = "broker" | "ops" | "resources" | null;

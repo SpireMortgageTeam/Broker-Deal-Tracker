@@ -27,6 +27,15 @@ export const COLLECTIONS: Record<CollectionKey, CollectionCfg> = {
   brokerContacts: { kind: "hash", redisKey: "h:brokercontacts", legacyKey: "data:brokercontacts", identity: (c) => c.name },
   brokers: { kind: "set", redisKey: "s:brokers", legacyKey: "data:brokers" },
   opsRecipients: { kind: "set", redisKey: "s:opsrecipients", legacyKey: "data:opsrecipients" },
+  // Community Tracker (migrated) — legacyKey paths are dead (no legacy
+  // single-array key ever existed for these), kept only so migrateIfNeeded()
+  // doesn't need to special-case them; redis.get() on a key that was never
+  // set just returns null and the migration loop no-ops.
+  communities: { kind: "hash", redisKey: "h:communities", legacyKey: "data:communities", identity: (c) => c.id },
+  communityIntel: { kind: "hash", redisKey: "h:communityintel", legacyKey: "data:communityintel", identity: (i) => i.communityId },
+  callLogs: { kind: "hash", redisKey: "h:calllogs", legacyKey: "data:calllogs", identity: (l) => l.id },
+  // Feature Sheets
+  builders: { kind: "hash", redisKey: "h:builders", legacyKey: "data:builders", identity: (b) => b.id },
 };
 
 export const COLLECTION_KEYS = Object.keys(COLLECTIONS) as CollectionKey[];

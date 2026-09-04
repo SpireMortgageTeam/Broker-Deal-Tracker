@@ -8,10 +8,11 @@ import { useEffect } from "react";
 import { showToast } from "./Toast";
 import FunnelBar from "./FunnelBar";
 import TimeEntriesModal from "./TimeEntriesModal";
+import CommunitiesOps from "./CommunitiesOps";
 import SortableTh, { sortRows, makeSortHandler, SortDir } from "./SortableTh";
 import type { Mutate } from "@/app/page";
 
-type Tab = "overview" | "coaching" | "deals" | "escalations" | "report" | "brokers" | "backups";
+type Tab = "overview" | "coaching" | "deals" | "escalations" | "report" | "brokers" | "communities" | "backups";
 
 export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -24,6 +25,7 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
     ["escalations", "Escalations"],
     ["report", "Weekly Report"],
     ["brokers", "Manage Brokers"],
+    ["communities", "Communities"],
     ["backups", "Data & Backups"],
   ];
 
@@ -44,6 +46,7 @@ export default function OpsView({ db, mutate }: { db: TrackerDB; mutate: Mutate 
       {tab === "escalations" && <Escalations db={db} mutate={mutate} clientName={clientName} />}
       {tab === "report" && <Report db={db} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />}
       {tab === "brokers" && <ManageBrokers db={db} mutate={mutate} />}
+      {tab === "communities" && <CommunitiesOps db={db} mutate={mutate} />}
       {tab === "backups" && <BackupsPanel db={db} />}
     </>
   );
