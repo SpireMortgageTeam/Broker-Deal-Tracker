@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Builder, TrackerDB } from "@/lib/types";
 import { PALETTE, FONT_SANS, FONT_SERIF } from "@/lib/brandPalette";
 import { TEAM, TeamMember, teamEmail } from "@/lib/team";
@@ -55,6 +55,17 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
   const community = db.communities.find((c) => c.id === communityId);
   const broker = TEAM.find((t) => t.id === brokerId);
   const scale = 420 / PAGE_W; // on-screen preview scale, matches InstaReview's fixed-preview-width approach
+
+  // Every community here is a Trico show-home, so once a "Trico" builder
+  // exists it should be the default pick rather than making brokers select
+  // it every time — but never overrides an explicit user choice, and steps
+  // aside the moment they pick someone else from the dropdown.
+  useEffect(() => {
+    if (builderId || db.builders.length === 0) return;
+    const trico = db.builders.find((b) => b.name.trim().toLowerCase().startsWith("trico"));
+    const fallback = trico || (db.builders.length === 1 ? db.builders[0] : undefined);
+    if (fallback) setBuilderId(fallback.id);
+  }, [db.builders, builderId]);
 
   function pickCommunity(id: string) {
     setCommunityId(id);
