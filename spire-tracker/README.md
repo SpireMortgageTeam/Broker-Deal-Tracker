@@ -215,3 +215,5 @@ npm run dev
 You'll need a `.env.local` file with `TEAM_PASSWORD`, `SESSION_SECRET`, and either
 real or Vercel-pulled Upstash credentials (`vercel env pull .env.local` after linking
 the project with `vercel link`).
+
+<!-- Vercel preview deployment pipeline test - safe to ignore -->
