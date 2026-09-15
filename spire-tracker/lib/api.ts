@@ -1,4 +1,5 @@
 import { COLLECTIONS, CollectionKey } from "./collections";
+import { showToast } from "@/components/Toast";
 
 // Loads every collection in one request.
 export async function loadAll(): Promise<Record<string, any[]>> {
@@ -7,11 +8,30 @@ export async function loadAll(): Promise<Record<string, any[]>> {
   return res.json();
 }
 
+// True once we've already redirected to /login for an expired session, so a
+// burst of failed saves around the same moment doesn't fire the redirect twice.
+let sessionExpiredHandled = false;
+
+function handleSaveFailure(status: number | null) {
+  if (status === 401) {
+    if (sessionExpiredHandled) return;
+    sessionExpiredHandled = true;
+    showToast("Session expired — logging you in again. That last change wasn't saved.");
+    window.setTimeout(() => {
+      window.location.href = "/login?expired=1";
+    }, 1500);
+    return;
+  }
+  showToast("Couldn't save your last change — check your connection and try again.");
+}
+
 // Persists only what actually changed between the previous and next array —
 // a per-record upsert/delete — instead of overwriting the whole collection.
 // This is what makes simultaneous editing safe: a save touches one record, so
-// a stale browser can no longer wipe everyone else's data. Fire-and-forget;
-// the UI already reflects the change optimistically.
+// a stale browser can no longer wipe everyone else's data. Fire-and-forget from
+// the caller's perspective, but a failed save is never silent: it surfaces a
+// toast and, for an expired session, sends the user back to /login instead of
+// letting them keep typing into a session that can no longer save anything.
 export function persistDiff(collection: CollectionKey, before: any[], after: any[]): void {
   const cfg = COLLECTIONS[collection];
   const body: Record<string, unknown> = { collection };
@@ -39,7 +59,11 @@ export function persistDiff(collection: CollectionKey, before: any[], after: any
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }).catch(() => {});
+  })
+    .then((res) => {
+      if (!res.ok) handleSaveFailure(res.status);
+    })
+    .catch(() => handleSaveFailure(null));
 }
 
 // ---- backups ----

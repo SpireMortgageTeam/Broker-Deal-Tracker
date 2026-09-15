@@ -1,12 +1,22 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const expired = searchParams.get("expired") === "1";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,6 +51,12 @@ export default function LoginPage() {
       <p className="muted" style={{ marginTop: 6 }}>
         Enter the shared team password to continue.
       </p>
+      {expired && (
+        <div className="login-error" style={{ marginTop: 12 }}>
+          Your session expired, so you were logged out. Anything you hadn&apos;t saved
+          before that needs to be re-entered — sorry about that.
+        </div>
+      )}
       <form onSubmit={submit} style={{ marginTop: 20, textAlign: "left" }}>
         <div className="field">
           <label htmlFor="password">Password</label>
