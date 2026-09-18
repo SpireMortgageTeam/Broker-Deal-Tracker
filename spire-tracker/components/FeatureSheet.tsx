@@ -46,7 +46,7 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
   const [cityProvince, setCityProvince] = useState("");
   const [heroPhoto, setHeroPhoto] = useState("");
   const [rate, setRate] = useState(4.99);
-  const [downPaymentPercent, setDownPaymentPercent] = useState(10);
+  const [downPaymentPercents, setDownPaymentPercents] = useState<number[]>([10]);
   const [brokerId, setBrokerId] = useState(TEAM[0]?.id || "");
   const [areaManagerName, setAreaManagerName] = useState("");
   const [areaManagerPhone, setAreaManagerPhone] = useState("");
@@ -85,6 +85,16 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
     setAreaManagerName(c.areaManagerName);
     setAreaManagerPhone(c.areaManagerPhone);
     setAreaManagerEmail(c.areaManagerEmail);
+  }
+
+  function addDownPayment() {
+    setDownPaymentPercents((rows) => [...rows, 0]);
+  }
+  function removeDownPayment(i: number) {
+    setDownPaymentPercents((rows) => rows.filter((_, idx) => idx !== i));
+  }
+  function updateDownPayment(i: number, value: number) {
+    setDownPaymentPercents((rows) => rows.map((r, idx) => (idx === i ? value : r)));
   }
 
   function addUnit() {
@@ -147,7 +157,7 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
     communityLine: communityLine || "Community Name · City, Province",
     heroPhoto,
     rate,
-    downPaymentPercent,
+    downPaymentPercents: downPaymentPercents.filter((p) => p > 0),
     broker,
     areaManagerName,
     areaManagerPhone,
@@ -197,15 +207,21 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
 
         <Divider />
         <SectionLabel n={2} label="Assumptions" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
-          <div>
-            <FieldLabel>Rate (%)</FieldLabel>
-            <input type="number" step="0.01" value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} />
-          </div>
-          <div>
-            <FieldLabel>Down payment (%)</FieldLabel>
-            <input type="number" step="1" value={downPaymentPercent} onChange={(e) => setDownPaymentPercent(Number(e.target.value))} style={inputStyle} />
-          </div>
+        <div style={{ marginTop: 14 }}>
+          <FieldLabel>Rate (%)</FieldLabel>
+          <input type="number" step="0.01" value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} />
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <FieldLabel>Down payment scenarios (%)</FieldLabel>
+          {downPaymentPercents.map((p, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <input type="number" value={p || ""} onChange={(e) => updateDownPayment(i, Number(e.target.value))} placeholder="10" style={inputStyle} />
+              {downPaymentPercents.length > 1 && (
+                <button type="button" className="x-link" onClick={() => removeDownPayment(i)}>Remove</button>
+              )}
+            </div>
+          ))}
+          <button type="button" className="btn secondary small" style={{ marginTop: 8 }} onClick={addDownPayment}>+ Add down payment %</button>
         </div>
 
         <Divider />
@@ -440,7 +456,7 @@ function AddBuilderForm({ mutate, onDone }: { mutate: Mutate; onDone: (id: strin
 // --- the print canvas: one page per price point -----------------------------
 
 function FeatureSheetCanvas({
-  unit, builder, communityLine, heroPhoto, rate, downPaymentPercent, broker,
+  unit, builder, communityLine, heroPhoto, rate, downPaymentPercents, broker,
   areaManagerName, areaManagerPhone, areaManagerEmail, builderWebsite,
   rateHoldMonths, rateHoldIntro, bullets, estimatedCompletion,
 }: {
@@ -449,7 +465,7 @@ function FeatureSheetCanvas({
   communityLine: string;
   heroPhoto: string;
   rate: number;
-  downPaymentPercent: number;
+  downPaymentPercents: number[];
   broker: TeamMember | undefined;
   areaManagerName: string;
   areaManagerPhone: string;
@@ -461,9 +477,13 @@ function FeatureSheetCanvas({
   estimatedCompletion: string;
 }) {
   const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
-  const scenario = unit.price > 0 ? buildDownPaymentScenario(unit.price, downPaymentPercent, rate) : ZERO_SCENARIO;
   const condoFee = unit.hasCondoFee ? unit.condoFee : 0;
-  const totalMonthly = scenario.monthlyPayment + condoFee;
+  const pcts = downPaymentPercents.length > 0 ? downPaymentPercents : [0];
+  const scenarios = pcts.map((pct) => {
+    const scenario = unit.price > 0 && pct > 0 ? buildDownPaymentScenario(unit.price, pct, rate) : ZERO_SCENARIO;
+    return { pct, scenario, total: scenario.monthlyPayment + condoFee };
+  });
+  const anyPremium = scenarios.some((s) => s.scenario.premiumAmount > 0);
 
   return (
     <div style={{ width: PAGE_W, height: PAGE_H, background: PALETTE.paper, fontFamily: FONT_SANS, color: PALETTE.confidence, display: "flex", flexDirection: "column" }}>
@@ -479,7 +499,7 @@ function FeatureSheetCanvas({
           </div>
           <div style={{ textAlign: "right", color: "#fff" }}>
             <div style={{ fontSize: 12, letterSpacing: "0.18em", color: "#fff", opacity: 0.85, textTransform: "uppercase" }}>
-              Purchase Price · {downPaymentPercent}% Down
+              Purchase Price
             </div>
             <div style={{ fontSize: 42, fontWeight: 700, marginTop: 6 }}>{money(unit.price)}</div>
           </div>
@@ -498,19 +518,35 @@ function FeatureSheetCanvas({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, padding: "32px 64px", flex: 1 }}>
         <div>
           <div style={{ fontSize: 11.5, letterSpacing: "0.18em", color: PALETTE.grey4, textTransform: "uppercase" }}>
-            Your numbers — assuming {downPaymentPercent}% down
+            Your numbers — {rate.toFixed(2)}% rate, 30-year amortization
           </div>
           <div style={{ marginTop: 16, border: `1px solid ${PALETTE.grey1}`, borderRadius: 6, background: "#fff", overflow: "hidden" }}>
-            <NumberRow label={`Down payment (${downPaymentPercent}%)`} value={money(scenario.downPayment)} />
-            <NumberRow label="Assuming rate" value={`${rate.toFixed(2)}%`} />
-            <NumberRow label="Amortization" value="30 years" />
-            <NumberRow label="Mortgage payment" value={money(scenario.monthlyPayment)} />
-            {condoFee > 0 && <NumberRow label="Condo fee" value={money(condoFee)} last />}
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: PALETTE.confidence, color: "#fff" }}>
+                  <th style={miniTh}>Down</th>
+                  <th style={miniTh}>Down payment</th>
+                  <th style={miniTh}>Mortgage pmt</th>
+                  <th style={miniTh}>Total monthly</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scenarios.map((s, i) => (
+                  <tr key={i} style={{ background: i % 2 ? PALETTE.paper : "#fff" }}>
+                    <td style={miniTd}><b>{s.pct}%</b></td>
+                    <td style={miniTd}>{money(s.scenario.downPayment)}</td>
+                    <td style={miniTd}>{money(s.scenario.monthlyPayment)}</td>
+                    <td style={{ ...miniTd, fontWeight: 700, color: PALETTE.warmthDark }}>{money(s.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div style={{ marginTop: 14, background: PALETTE.confidence, color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", borderRadius: 4 }}>
-            <span style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase" }}>Total monthly at {downPaymentPercent}% down</span>
-            <span style={{ fontSize: 26, fontWeight: 700 }}>{money(totalMonthly)}</span>
-          </div>
+          {condoFee > 0 && (
+            <div style={{ marginTop: 10, fontSize: 11.5, color: PALETTE.grey4 }}>
+              Total monthly above includes the {money(condoFee)}/month condo fee.
+            </div>
+          )}
         </div>
 
         <div style={{ borderLeft: `1px solid ${PALETTE.clarity}`, paddingLeft: 48 }}>
@@ -553,9 +589,9 @@ function FeatureSheetCanvas({
           </div>
         </div>
         <div style={{ fontSize: 9.5, lineHeight: 1.5, opacity: 0.7, marginTop: 16, borderTop: "1px solid rgba(255,255,255,0.2)", paddingTop: 12 }}>
-          Figures assume a {downPaymentPercent}% down payment, {rate.toFixed(2)}% fixed rate, and 30-year amortization
-          {scenario.premiumAmount > 0 ? ", with the applicable CMHC insurance premium added to the mortgage" : ""}
-          {condoFee > 0 ? ". Condo fee shown is in addition to, and does not include, the mortgage payment" : ""}.
+          Figures assume the {rate.toFixed(2)}% fixed rate and 30-year amortization shown, at the down payment(s) indicated above
+          {anyPremium ? ", with the applicable CMHC insurance premium added to the mortgage where the down payment is under 20%" : ""}
+          {condoFee > 0 ? ". Total monthly figures include the condo fee shown above" : ""}.
           Payments are principal and interest only and exclude property tax, home insurance, and utilities. Estimates only — subject to change, qualification, and lender approval.
         </div>
       </div>
@@ -572,11 +608,5 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NumberRow({ label, value, last }: { label: string; value: string; last?: boolean }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: last ? "none" : `1px solid ${PALETTE.clarity}` }}>
-      <span style={{ fontSize: 11.5, letterSpacing: "0.06em", color: PALETTE.grey4, textTransform: "uppercase" }}>{label}</span>
-      <span style={{ fontSize: 17, fontWeight: 600 }}>{value}</span>
-    </div>
-  );
-}
+const miniTh: React.CSSProperties = { padding: "10px 14px", textAlign: "left", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 };
+const miniTd: React.CSSProperties = { padding: "12px 14px", borderBottom: `1px solid ${PALETTE.clarity}`, fontSize: 14 };
