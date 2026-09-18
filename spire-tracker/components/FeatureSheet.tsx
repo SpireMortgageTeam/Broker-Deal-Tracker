@@ -37,6 +37,12 @@ function newUnit(): FeatureUnit {
   return { id: uid(), name: "", price: 0, type: "", layout: "", size: "", hasCondoFee: false, condoFee: 0 };
 }
 
+interface RateScenario {
+  id: string;
+  rate: number; // rate often differs by down payment tier (insured vs. conventional)
+  downPaymentPercent: number;
+}
+
 const ZERO_SCENARIO = { downPayment: 0, downPercent: 0, premiumRate: 0, premiumAmount: 0, principal: 0, monthlyPayment: 0 };
 
 export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
@@ -45,8 +51,7 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
   const [communityNameOverride, setCommunityNameOverride] = useState("");
   const [cityProvince, setCityProvince] = useState("");
   const [heroPhoto, setHeroPhoto] = useState("");
-  const [rate, setRate] = useState(4.99);
-  const [downPaymentPercents, setDownPaymentPercents] = useState<number[]>([10]);
+  const [scenarios, setScenarios] = useState<RateScenario[]>([{ id: uid(), rate: 4.99, downPaymentPercent: 10 }]);
   const [brokerId, setBrokerId] = useState(TEAM[0]?.id || "");
   const [areaManagerName, setAreaManagerName] = useState("");
   const [areaManagerPhone, setAreaManagerPhone] = useState("");
@@ -87,14 +92,14 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
     setAreaManagerEmail(c.areaManagerEmail);
   }
 
-  function addDownPayment() {
-    setDownPaymentPercents((rows) => [...rows, 0]);
+  function addScenario() {
+    setScenarios((rows) => [...rows, { id: uid(), rate: 0, downPaymentPercent: 0 }]);
   }
-  function removeDownPayment(i: number) {
-    setDownPaymentPercents((rows) => rows.filter((_, idx) => idx !== i));
+  function removeScenario(id: string) {
+    setScenarios((rows) => rows.filter((r) => r.id !== id));
   }
-  function updateDownPayment(i: number, value: number) {
-    setDownPaymentPercents((rows) => rows.map((r, idx) => (idx === i ? value : r)));
+  function updateScenario<K extends keyof RateScenario>(id: string, field: K, value: RateScenario[K]) {
+    setScenarios((rows) => rows.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
   }
 
   function addUnit() {
@@ -156,8 +161,7 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
     builder,
     communityLine: communityLine || "Community Name · City, Province",
     heroPhoto,
-    rate,
-    downPaymentPercents: downPaymentPercents.filter((p) => p > 0),
+    scenarios: scenarios.filter((s) => s.downPaymentPercent > 0 && s.rate > 0),
     broker,
     areaManagerName,
     areaManagerPhone,
@@ -207,21 +211,46 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
 
         <Divider />
         <SectionLabel n={2} label="Assumptions" />
-        <div style={{ marginTop: 14 }}>
-          <FieldLabel>Rate (%)</FieldLabel>
-          <input type="number" step="0.01" value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} />
+        <div style={{ marginTop: 6, fontSize: 11.5, color: PALETTE.grey4 }}>
+          Rate often differs by down payment tier (insured vs. conventional) — add one scenario per rate/down-payment pairing.
         </div>
-        <div style={{ marginTop: 14 }}>
-          <FieldLabel>Down payment scenarios (%)</FieldLabel>
-          {downPaymentPercents.map((p, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <input type="number" value={p || ""} onChange={(e) => updateDownPayment(i, Number(e.target.value))} placeholder="10" style={inputStyle} />
-              {downPaymentPercents.length > 1 && (
-                <button type="button" className="x-link" onClick={() => removeDownPayment(i)}>Remove</button>
-              )}
+        <div style={{ marginTop: 8 }}>
+          <FieldLabel>Down payment &amp; rate scenarios</FieldLabel>
+          {scenarios.map((s, i) => (
+            <div key={s.id} style={{ marginTop: 10, padding: 10, border: `1px solid ${PALETTE.grey1}`, borderRadius: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", color: PALETTE.grey4, textTransform: "uppercase" }}>Scenario {i + 1}</span>
+                {scenarios.length > 1 && (
+                  <button type="button" className="x-link" onClick={() => removeScenario(s.id)}>Remove</button>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+                <div>
+                  <FieldLabel>Down payment (%)</FieldLabel>
+                  <input
+                    type="number"
+                    step="1"
+                    value={s.downPaymentPercent || ""}
+                    onChange={(e) => updateScenario(s.id, "downPaymentPercent", Number(e.target.value))}
+                    placeholder="10"
+                    style={{ ...inputStyle, marginTop: 6 }}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Rate (%)</FieldLabel>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={s.rate || ""}
+                    onChange={(e) => updateScenario(s.id, "rate", Number(e.target.value))}
+                    placeholder="4.99"
+                    style={{ ...inputStyle, marginTop: 6 }}
+                  />
+                </div>
+              </div>
             </div>
           ))}
-          <button type="button" className="btn secondary small" style={{ marginTop: 8 }} onClick={addDownPayment}>+ Add down payment %</button>
+          <button type="button" className="btn secondary small" style={{ marginTop: 8 }} onClick={addScenario}>+ Add scenario</button>
         </div>
 
         <Divider />
@@ -456,7 +485,7 @@ function AddBuilderForm({ mutate, onDone }: { mutate: Mutate; onDone: (id: strin
 // --- the print canvas: one page per price point -----------------------------
 
 function FeatureSheetCanvas({
-  unit, builder, communityLine, heroPhoto, rate, downPaymentPercents, broker,
+  unit, builder, communityLine, heroPhoto, scenarios: rateScenarios, broker,
   areaManagerName, areaManagerPhone, areaManagerEmail, builderWebsite,
   rateHoldMonths, rateHoldIntro, bullets, estimatedCompletion,
 }: {
@@ -464,8 +493,7 @@ function FeatureSheetCanvas({
   builder: Builder | undefined;
   communityLine: string;
   heroPhoto: string;
-  rate: number;
-  downPaymentPercents: number[];
+  scenarios: RateScenario[];
   broker: TeamMember | undefined;
   areaManagerName: string;
   areaManagerPhone: string;
@@ -478,12 +506,11 @@ function FeatureSheetCanvas({
 }) {
   const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
   const condoFee = unit.hasCondoFee ? unit.condoFee : 0;
-  const pcts = downPaymentPercents.length > 0 ? downPaymentPercents : [0];
-  const scenarios = pcts.map((pct) => {
-    const scenario = unit.price > 0 && pct > 0 ? buildDownPaymentScenario(unit.price, pct, rate) : ZERO_SCENARIO;
-    return { pct, scenario, total: scenario.monthlyPayment + condoFee };
+  const rows = (rateScenarios.length > 0 ? rateScenarios : [{ id: "placeholder", rate: 0, downPaymentPercent: 0 }]).map((s) => {
+    const scenario = unit.price > 0 && s.downPaymentPercent > 0 ? buildDownPaymentScenario(unit.price, s.downPaymentPercent, s.rate) : ZERO_SCENARIO;
+    return { pct: s.downPaymentPercent, rate: s.rate, scenario, total: scenario.monthlyPayment + condoFee };
   });
-  const anyPremium = scenarios.some((s) => s.scenario.premiumAmount > 0);
+  const anyPremium = rows.some((r) => r.scenario.premiumAmount > 0);
 
   return (
     <div style={{ width: PAGE_W, height: PAGE_H, background: PALETTE.paper, fontFamily: FONT_SANS, color: PALETTE.confidence, display: "flex", flexDirection: "column" }}>
@@ -518,25 +545,27 @@ function FeatureSheetCanvas({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, padding: "32px 64px", flex: 1 }}>
         <div>
           <div style={{ fontSize: 11.5, letterSpacing: "0.18em", color: PALETTE.grey4, textTransform: "uppercase" }}>
-            Your numbers — {rate.toFixed(2)}% rate, 30-year amortization
+            Your numbers — 30-year amortization
           </div>
           <div style={{ marginTop: 16, border: `1px solid ${PALETTE.grey1}`, borderRadius: 6, background: "#fff", overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: PALETTE.confidence, color: "#fff" }}>
                   <th style={miniTh}>Down</th>
+                  <th style={miniTh}>Rate</th>
                   <th style={miniTh}>Down payment</th>
                   <th style={miniTh}>Mortgage pmt</th>
                   <th style={miniTh}>Total monthly</th>
                 </tr>
               </thead>
               <tbody>
-                {scenarios.map((s, i) => (
+                {rows.map((r, i) => (
                   <tr key={i} style={{ background: i % 2 ? PALETTE.paper : "#fff" }}>
-                    <td style={miniTd}><b>{s.pct}%</b></td>
-                    <td style={miniTd}>{money(s.scenario.downPayment)}</td>
-                    <td style={miniTd}>{money(s.scenario.monthlyPayment)}</td>
-                    <td style={{ ...miniTd, fontWeight: 700, color: PALETTE.warmthDark }}>{money(s.total)}</td>
+                    <td style={miniTd}><b>{r.pct}%</b></td>
+                    <td style={miniTd}>{r.rate.toFixed(2)}%</td>
+                    <td style={miniTd}>{money(r.scenario.downPayment)}</td>
+                    <td style={miniTd}>{money(r.scenario.monthlyPayment)}</td>
+                    <td style={{ ...miniTd, fontWeight: 700, color: PALETTE.warmthDark }}>{money(r.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -589,7 +618,7 @@ function FeatureSheetCanvas({
           </div>
         </div>
         <div style={{ fontSize: 9.5, lineHeight: 1.5, opacity: 0.7, marginTop: 16, borderTop: "1px solid rgba(255,255,255,0.2)", paddingTop: 12 }}>
-          Figures assume the {rate.toFixed(2)}% fixed rate and 30-year amortization shown, at the down payment(s) indicated above
+          Figures assume the fixed rate(s), down payment(s), and 30-year amortization shown above
           {anyPremium ? ", with the applicable CMHC insurance premium added to the mortgage where the down payment is under 20%" : ""}
           {condoFee > 0 ? ". Total monthly figures include the condo fee shown above" : ""}.
           Payments are principal and interest only and exclude property tax, home insurance, and utilities. Estimates only — subject to change, qualification, and lender approval.
