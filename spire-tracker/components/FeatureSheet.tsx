@@ -70,6 +70,9 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
   const [error, setError] = useState("");
   const [showAddBuilder, setShowAddBuilder] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
+  const [pasteText, setPasteText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState("");
 
   const exportRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -118,6 +121,54 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
       setHeroPhoto(dataUrl);
     } catch {
       setError("Couldn't load that photo — try a different file.");
+    }
+  }
+
+  async function parseFromPaste() {
+    if (!pasteText.trim()) {
+      setParseError("Paste the rep's info first.");
+      return;
+    }
+    setParsing(true);
+    setParseError("");
+    try {
+      const res = await fetch("/api/feature-sheet/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pasteText }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setParseError(data.error || "Couldn't parse that — fill the fields in by hand below.");
+        return;
+      }
+      if (data.community?.name) setCommunityNameOverride(data.community.name);
+      if (data.community?.cityProvince) setCityProvince(data.community.cityProvince);
+
+      if (Array.isArray(data.units) && data.units.length) {
+        const parsedUnits: FeatureUnit[] = data.units.map((u: any) => ({
+          id: uid(),
+          name: u.name || "",
+          price: u.price || 0,
+          type: u.type || "",
+          layout: u.layout || "",
+          size: u.size || "",
+          hasCondoFee: (u.condoFee || 0) > 0,
+          condoFee: u.condoFee || 0,
+        }));
+        setUnits((existing) => {
+          const isBlank = existing.length === 1 && !existing[0].name && existing[0].price <= 0;
+          return isBlank ? parsedUnits : [...existing, ...parsedUnits];
+        });
+        showToast(`Filled in ${parsedUnits.length} price point${parsedUnits.length === 1 ? "" : "s"} from the pasted info.`);
+        setPasteText("");
+      } else {
+        setParseError("Didn't find any price points in that text — check the fields below.");
+      }
+    } catch {
+      setParseError("Couldn't reach the parser. Try again.");
+    } finally {
+      setParsing(false);
     }
   }
 
@@ -176,6 +227,28 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
   return (
     <div style={{ display: "grid", gridTemplateColumns: "470px 1fr", gap: 0, fontFamily: FONT_SANS, color: PALETTE.confidence, background: PALETTE.paper, margin: "0 -24px" }}>
       <div style={{ background: "#fff", borderRight: `1px solid ${PALETTE.clarity}`, padding: "32px 30px 64px" }}>
+        <div style={{ padding: 14, background: PALETTE.paper, border: `1px solid ${PALETTE.clarity}`, borderRadius: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: PALETTE.confidence }}>Paste from Trico rep</div>
+          <div style={{ fontSize: 11.5, color: PALETTE.grey4, marginTop: 4, lineHeight: 1.5 }}>
+            Paste the rep's email or message confirming the community, price points, sizes, and condo fees — we'll prefill the fields below. Nothing is guessed; anything not mentioned is left blank.
+          </div>
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            placeholder="Paste the rep's confirmation here…"
+            style={{ ...textareaStyle, height: 90, marginTop: 8 }}
+          />
+          <button type="button" className="btn secondary small" style={{ marginTop: 8 }} disabled={parsing} onClick={parseFromPaste}>
+            {parsing ? "Reading…" : "Parse & fill"}
+          </button>
+          {parseError && (
+            <div style={{ marginTop: 8, padding: "8px 10px", background: PALETTE.errorBg, borderLeft: `3px solid ${PALETTE.errorText}`, color: PALETTE.errorText, fontSize: 12, borderRadius: 2 }}>
+              {parseError}
+            </div>
+          )}
+        </div>
+        <Divider />
+
         <SectionLabel n={1} label="Builder & community" />
         <div style={{ marginTop: 14 }}>
           <FieldLabel>Builder</FieldLabel>
@@ -515,90 +588,94 @@ function FeatureSheetCanvas({
   return (
     <div style={{ width: PAGE_W, height: PAGE_H, background: PALETTE.paper, fontFamily: FONT_SANS, color: PALETTE.confidence, display: "flex", flexDirection: "column" }}>
       {/* 1. Hero photo band */}
-      <div style={{ position: "relative", height: 480, background: heroPhoto ? undefined : PALETTE.grey1, flexShrink: 0 }}>
+      <div style={{ position: "relative", height: 620, background: heroPhoto ? undefined : PALETTE.grey1, flexShrink: 0 }}>
         {heroPhoto && <img src={heroPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }} />}
         <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to top, ${PALETTE.confidence}E6, ${PALETTE.confidence}40 55%, transparent 85%)` }} />
         <div style={{ position: "absolute", left: 64, right: 64, bottom: 40, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>
             <div style={{ fontSize: 12.5, letterSpacing: "0.2em", color: PALETTE.warmth, textTransform: "uppercase" }}>{communityLine}</div>
-            <div style={{ fontSize: 50, fontWeight: 600, color: "#fff", textTransform: "uppercase", lineHeight: 1.05, marginTop: 8 }}>{unit.name || "Unit Name"}</div>
+            <div style={{ fontSize: 56, fontWeight: 600, color: "#fff", textTransform: "uppercase", lineHeight: 1.05, marginTop: 8 }}>{unit.name || "Unit Name"}</div>
             <div style={{ width: 56, height: 3, background: PALETTE.warmth, marginTop: 12 }} />
           </div>
           <div style={{ textAlign: "right", color: "#fff" }}>
             <div style={{ fontSize: 12, letterSpacing: "0.18em", color: "#fff", opacity: 0.85, textTransform: "uppercase" }}>
               Purchase Price
             </div>
-            <div style={{ fontSize: 42, fontWeight: 700, marginTop: 6 }}>{money(unit.price)}</div>
+            <div style={{ fontSize: 46, fontWeight: 700, marginTop: 6 }}>{money(unit.price)}</div>
           </div>
         </div>
       </div>
 
       {/* 2. Stat bar */}
-      <div style={{ display: "flex", gap: 56, padding: "28px 64px", borderBottom: `1px solid ${PALETTE.clarity}`, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 56, padding: "34px 64px", borderBottom: `1px solid ${PALETTE.clarity}`, flexShrink: 0 }}>
         <Stat label="Type" value={unit.type || "—"} />
         <Stat label="Layout" value={unit.layout || "—"} />
         <Stat label="Size" value={unit.size || "—"} />
         <Stat label="Condo Fee" value={condoFee > 0 ? `${money(condoFee)} / Month` : "No condo fees"} />
       </div>
 
-      {/* 3. Numbers box + rate hold program, two columns */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, padding: "32px 64px", flex: 1 }}>
-        <div>
-          <div style={{ fontSize: 11.5, letterSpacing: "0.18em", color: PALETTE.grey4, textTransform: "uppercase" }}>
-            Your numbers — 30-year amortization
-          </div>
-          <div style={{ marginTop: 16, border: `1px solid ${PALETTE.grey1}`, borderRadius: 6, background: "#fff", overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: PALETTE.confidence, color: "#fff" }}>
-                  <th style={miniTh}>Down</th>
-                  <th style={miniTh}>Rate</th>
-                  <th style={miniTh}>Down payment</th>
-                  <th style={miniTh}>Mortgage pmt</th>
-                  <th style={miniTh}>Total monthly</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} style={{ background: i % 2 ? PALETTE.paper : "#fff" }}>
-                    <td style={miniTd}><b>{r.pct}%</b></td>
-                    <td style={miniTd}>{r.rate.toFixed(2)}%</td>
-                    <td style={miniTd}>{money(r.scenario.downPayment)}</td>
-                    <td style={miniTd}>{money(r.scenario.monthlyPayment)}</td>
-                    <td style={{ ...miniTd, fontWeight: 700, color: PALETTE.warmthDark }}>{money(r.total)}</td>
+      {/* 3. Numbers box + rate hold program, two columns — vertically centered in the
+          remaining space so leftover room splits evenly instead of collecting as one
+          block of dead space above the footer. */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "0 64px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 56, width: "100%" }}>
+          <div>
+            <div style={{ fontSize: 12.5, letterSpacing: "0.18em", color: PALETTE.grey4, textTransform: "uppercase" }}>
+              Your numbers — 30-year amortization
+            </div>
+            <div style={{ marginTop: 18, border: `1px solid ${PALETTE.grey1}`, borderRadius: 6, background: "#fff", overflow: "hidden" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: PALETTE.confidence, color: "#fff" }}>
+                    <th style={miniTh}>Down</th>
+                    <th style={miniTh}>Rate</th>
+                    <th style={miniTh}>Down payment</th>
+                    <th style={miniTh}>Mortgage pmt</th>
+                    <th style={miniTh}>Total monthly</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {condoFee > 0 && (
-            <div style={{ marginTop: 10, fontSize: 11.5, color: PALETTE.grey4 }}>
-              Total monthly above includes the {money(condoFee)}/month condo fee.
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} style={{ background: i % 2 ? PALETTE.paper : "#fff" }}>
+                      <td style={miniTd}><b>{r.pct}%</b></td>
+                      <td style={miniTd}>{r.rate.toFixed(2)}%</td>
+                      <td style={miniTd}>{money(r.scenario.downPayment)}</td>
+                      <td style={miniTd}>{money(r.scenario.monthlyPayment)}</td>
+                      <td style={{ ...miniTd, fontWeight: 700, color: PALETTE.warmthDark }}>{money(r.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+            {condoFee > 0 && (
+              <div style={{ marginTop: 12, fontSize: 12, color: PALETTE.grey4 }}>
+                Total monthly above includes the {money(condoFee)}/month condo fee.
+              </div>
+            )}
+          </div>
 
-        <div style={{ borderLeft: `1px solid ${PALETTE.clarity}`, paddingLeft: 48 }}>
-          <div style={{ fontSize: 12, letterSpacing: "0.14em", color: PALETTE.warmthDark, textTransform: "uppercase", fontWeight: 700 }}>
-            {rateHoldMonths}-Month Rate Hold Program Available
-          </div>
-          <div style={{ fontSize: 14, lineHeight: 1.6, marginTop: 14 }}>{rateHoldIntro}</div>
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            {bullets.map((b, i) => (
-              <div key={i} style={{ fontSize: 13, lineHeight: 1.5 }}>{b}</div>
-            ))}
-          </div>
-          {estimatedCompletion && (
-            <div style={{ marginTop: 18, fontFamily: FONT_SERIF, fontStyle: "italic", fontSize: 13.5, color: PALETTE.grey4 }}>
-              Estimated completion: {estimatedCompletion}.
+          <div style={{ borderLeft: `1px solid ${PALETTE.clarity}`, paddingLeft: 56 }}>
+            <div style={{ fontSize: 13, letterSpacing: "0.14em", color: PALETTE.warmthDark, textTransform: "uppercase", fontWeight: 700 }}>
+              {rateHoldMonths}-Month Rate Hold Program Available
             </div>
-          )}
+            <div style={{ fontSize: 15.5, lineHeight: 1.7, marginTop: 16 }}>{rateHoldIntro}</div>
+            <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+              {bullets.map((b, i) => (
+                <div key={i} style={{ fontSize: 14.5, lineHeight: 1.6 }}>{b}</div>
+              ))}
+            </div>
+            {estimatedCompletion && (
+              <div style={{ marginTop: 22, fontFamily: FONT_SERIF, fontStyle: "italic", fontSize: 15, color: PALETTE.grey4 }}>
+                Estimated completion: {estimatedCompletion}.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* 4. Footer */}
-      <div style={{ background: PALETTE.confidence, color: "#fff", padding: "28px 64px", flexShrink: 0 }}>
-        <img src="/insta-review/assets/logo-spire-stacked-white.png" alt="Spire Mortgage" style={{ height: 44 }} />
+      <div style={{ background: PALETTE.confidence, color: "#fff", padding: "36px 64px", flexShrink: 0 }}>
+        <img src="/insta-review/assets/logo-spire-stacked-white.png" alt="Spire Mortgage" style={{ height: 48 }} />
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18 }}>
           <div>
             <div style={{ fontSize: 10, letterSpacing: "0.14em", color: PALETTE.warmth, textTransform: "uppercase" }}>Mortgage</div>
