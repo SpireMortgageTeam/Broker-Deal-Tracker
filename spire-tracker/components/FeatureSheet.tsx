@@ -585,10 +585,20 @@ function FeatureSheetCanvas({
   });
   const anyPremium = rows.some((r) => r.scenario.premiumAmount > 0);
 
+  // Each scenario repeats the full box + total bar, so with more than one
+  // scenario things need to shrink to keep every page — hero through
+  // footer — inside the fixed print height instead of spilling past it.
+  const heroHeight = rows.length >= 3 ? 360 : rows.length === 2 ? 540 : 620;
+  const rowVPad = rows.length > 1 ? 8 : 14;
+  const barVPad = rows.length > 1 ? 10 : 18;
+  const barMarginTop = rows.length > 1 ? 8 : 14;
+  const footerPad = rows.length > 1 ? 26 : 36;
+  const footerLogoHeight = rows.length > 1 ? 36 : 48;
+
   return (
     <div style={{ width: PAGE_W, height: PAGE_H, background: PALETTE.paper, fontFamily: FONT_SANS, color: PALETTE.confidence, display: "flex", flexDirection: "column" }}>
       {/* 1. Hero photo band */}
-      <div style={{ position: "relative", height: 620, background: heroPhoto ? undefined : PALETTE.grey1, flexShrink: 0 }}>
+      <div style={{ position: "relative", height: heroHeight, background: heroPhoto ? undefined : PALETTE.grey1, flexShrink: 0 }}>
         {heroPhoto && <img src={heroPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }} />}
         <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to top, ${PALETTE.confidence}E6, ${PALETTE.confidence}40 55%, transparent 85%)` }} />
         <div style={{ position: "absolute", left: 64, right: 64, bottom: 40, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -623,35 +633,26 @@ function FeatureSheetCanvas({
             <div style={{ fontSize: 12.5, letterSpacing: "0.18em", color: PALETTE.grey4, textTransform: "uppercase" }}>
               Your numbers — 30-year amortization
             </div>
-            <div style={{ marginTop: 18, border: `1px solid ${PALETTE.grey1}`, borderRadius: 6, background: "#fff", overflow: "hidden" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: PALETTE.confidence, color: "#fff" }}>
-                    <th style={miniTh}>Down</th>
-                    <th style={miniTh}>Rate</th>
-                    <th style={miniTh}>Down payment</th>
-                    <th style={miniTh}>Mortgage pmt</th>
-                    <th style={miniTh}>Total monthly</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={i} style={{ background: i % 2 ? PALETTE.paper : "#fff" }}>
-                      <td style={miniTd}><b>{r.pct}%</b></td>
-                      <td style={miniTd}>{r.rate.toFixed(2)}%</td>
-                      <td style={miniTd}>{money(r.scenario.downPayment)}</td>
-                      <td style={miniTd}>{money(r.scenario.monthlyPayment)}</td>
-                      <td style={{ ...miniTd, fontWeight: 700, color: PALETTE.warmthDark }}>{money(r.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {condoFee > 0 && (
-              <div style={{ marginTop: 12, fontSize: 12, color: PALETTE.grey4 }}>
-                Total monthly above includes the {money(condoFee)}/month condo fee.
+            {rows.map((r, i) => (
+              <div key={i} style={{ marginTop: i === 0 ? 18 : (rows.length > 2 ? 16 : 22) }}>
+                {rows.length > 1 && (
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: PALETTE.warmthDark, textTransform: "uppercase", marginBottom: 6 }}>
+                    {r.pct}% Down @ {r.rate.toFixed(2)}%
+                  </div>
+                )}
+                <div style={{ border: `1px solid ${PALETTE.grey1}`, borderRadius: 6, background: "#fff", overflow: "hidden" }}>
+                  <NumberRow label={`Down Payment (${r.pct}%)`} value={money(r.scenario.downPayment)} vPad={rowVPad} />
+                  <NumberRow label="Assuming Rate" value={`${r.rate.toFixed(2)}%`} vPad={rowVPad} />
+                  {rows.length === 1 && <NumberRow label="Amortization" value="30 Years" vPad={rowVPad} />}
+                  <NumberRow label="Mortgage Payment" value={money(r.scenario.monthlyPayment)} vPad={rowVPad} />
+                  {condoFee > 0 && <NumberRow label="Condo Fee" value={money(condoFee)} vPad={rowVPad} last />}
+                </div>
+                <div style={{ marginTop: barMarginTop, background: PALETTE.confidence, color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: `${barVPad}px 22px`, borderRadius: 4 }}>
+                  <span style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase" }}>Total Monthly at {r.pct}% Down</span>
+                  <span style={{ fontSize: rows.length > 1 ? 22 : 26, fontWeight: 700 }}>{money(r.total)}</span>
+                </div>
               </div>
-            )}
+            ))}
           </div>
 
           <div style={{ borderLeft: `1px solid ${PALETTE.clarity}`, paddingLeft: 56 }}>
@@ -674,8 +675,8 @@ function FeatureSheetCanvas({
       </div>
 
       {/* 4. Footer */}
-      <div style={{ background: PALETTE.confidence, color: "#fff", padding: "36px 64px", flexShrink: 0 }}>
-        <img src="/insta-review/assets/logo-spire-stacked-white.png" alt="Spire Mortgage" style={{ height: 48 }} />
+      <div style={{ background: PALETTE.confidence, color: "#fff", padding: `${footerPad}px 64px`, flexShrink: 0 }}>
+        <img src="/insta-review/assets/logo-spire-stacked-white.png" alt="Spire Mortgage" style={{ height: footerLogoHeight }} />
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18 }}>
           <div>
             <div style={{ fontSize: 10, letterSpacing: "0.14em", color: PALETTE.warmth, textTransform: "uppercase" }}>Mortgage</div>
@@ -714,5 +715,11 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const miniTh: React.CSSProperties = { padding: "10px 14px", textAlign: "left", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 };
-const miniTd: React.CSSProperties = { padding: "12px 14px", borderBottom: `1px solid ${PALETTE.clarity}`, fontSize: 14 };
+function NumberRow({ label, value, last, vPad = 14 }: { label: string; value: string; last?: boolean; vPad?: number }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `${vPad}px 20px`, borderBottom: last ? "none" : `1px solid ${PALETTE.clarity}` }}>
+      <span style={{ fontSize: 11.5, letterSpacing: "0.06em", color: PALETTE.grey4, textTransform: "uppercase" }}>{label}</span>
+      <span style={{ fontSize: 17, fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+}
