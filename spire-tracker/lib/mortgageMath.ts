@@ -79,3 +79,9 @@ export function buildPriceRow(price: number, annualRatePct: number): PriceRow {
     twentyPercent: buildColumn("20% Down", price, price * 0.2, annualRatePct),
   };
 }
+
+// Single-scenario version for the per-unit Feature Sheet page: one price,
+// one assumed down-payment %, instead of the three-column comparison above.
+export function buildDownPaymentScenario(price: number, downPaymentPercent: number, annualRatePct: number): DownPaymentColumn {
+  return buildColumn(`${downPaymentPercent}% Down`, price, price * (downPaymentPercent / 100), annualRatePct);
+}
