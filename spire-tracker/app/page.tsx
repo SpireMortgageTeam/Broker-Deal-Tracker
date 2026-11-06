@@ -26,6 +26,7 @@ const EMPTY_DB: TrackerDB = {
   communityIntel: [],
   callLogs: [],
   builders: [],
+  lenders: [],
 };
 
 export default function Page() {
@@ -50,6 +51,7 @@ export default function Page() {
           communityIntel: all.communityIntel || [],
           callLogs: all.callLogs || [],
           builders: all.builders || [],
+          lenders: all.lenders || [],
         } as TrackerDB);
       } catch {
         /* leave EMPTY_DB; user sees an empty state rather than a crash */

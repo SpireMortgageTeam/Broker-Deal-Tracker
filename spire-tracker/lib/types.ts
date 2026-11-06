@@ -183,6 +183,21 @@ export interface Builder {
   name: string;
   logo: string; // base64 data URL
   brandColor?: string; // hex; falls back to the Atmosphere palette color
+  // Lender whose logo pre-fills the sheet footer when this builder is picked
+  // (e.g. Trico's partner lender). Optional — older builder records won't have it.
+  defaultLenderId?: string;
+}
+
+// Lender partner whose logo sits in the feature-sheet footer, above the
+// builder contact block. Saved once and reused, same as builders.
+export interface Lender {
+  id: string;
+  name: string;
+  logo: string; // base64 PNG data URL
+  // The footer is dark. Most lender logos are full-colour on white, so by
+  // default the logo is set on a white plate; tick this for a white/knockout
+  // logo that should sit directly on the dark footer.
+  logoOnDark?: boolean;
 }
 
 export interface TrackerDB {
@@ -197,6 +212,7 @@ export interface TrackerDB {
   communityIntel: CommunityIntel[];
   callLogs: CallLog[];
   builders: Builder[];
+  lenders: Lender[];
 }
 
 export type Role = "broker" | "ops" | "resources" | null;

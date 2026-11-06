@@ -175,6 +175,17 @@ are saved once and reused across every sheet for that builder; the hero
 photo is uploaded fresh each time. No new environment variables — the PDF
 export runs entirely client-side.
 
+**Lender logo (footer).** Under Step 01 there's a *Lender logo (footer)*
+picker. Lenders (name + logo) are saved once and reused, like builders. The
+logo prints in the footer's top-right, directly above the builder contact
+block, opposite the Spire Mortgage Team mark. Full-colour logos sit on a white
+plate so they stay legible on the dark footer; tick *White / knockout logo* for
+a white logo that should sit straight on the footer. A lender can be set as a
+builder's default (e.g. Trico Homes → its partner lender) so picking that
+builder pre-fills the lender automatically. Choose *No lender logo* to leave it
+off. Lenders are stored in Redis under `h:lenders`; no new environment
+variables.
+
 ## Data safety: concurrent editing + backups
 
 The tracker is built for the whole team to use at the same time. Each change
