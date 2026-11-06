@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { Builder, TrackerDB } from "@/lib/types";
+import { Builder, Lender, TrackerDB } from "@/lib/types";
 import { PALETTE, FONT_SANS, FONT_SERIF } from "@/lib/brandPalette";
 import { TEAM, TeamMember, teamEmail } from "@/lib/team";
 import { buildDownPaymentScenario } from "@/lib/mortgageMath";
@@ -47,6 +47,8 @@ const ZERO_SCENARIO = { downPayment: 0, downPercent: 0, premiumRate: 0, premiumA
 
 export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mutate }) {
   const [builderId, setBuilderId] = useState("");
+  const [lenderId, setLenderId] = useState("");
+  const [showAddLender, setShowAddLender] = useState(false);
   const [communityId, setCommunityId] = useState("");
   const [communityNameOverride, setCommunityNameOverride] = useState("");
   const [cityProvince, setCityProvince] = useState("");
@@ -77,12 +79,48 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
   const exportRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const builder = db.builders.find((b) => b.id === builderId);
+  const lenders = db.lenders || [];
+  const lender = lenders.find((l) => l.id === lenderId);
   const community = db.communities.find((c) => c.id === communityId);
   const broker = TEAM.find((t) => t.id === brokerId);
   const scale = 420 / PAGE_W; // on-screen preview scale, matches InstaReview's fixed-preview-width approach
 
   const validUnits = units.filter((u) => u.price > 0);
   const activeUnit = validUnits[Math.min(previewIndex, Math.max(validUnits.length - 1, 0))];
+
+  // Picking a builder pre-fills its saved default lender (e.g. Trico → its
+  // partner lender). A builder with no default leaves whatever lender is
+  // already chosen alone rather than silently clearing it.
+  function pickBuilder(id: string) {
+    setBuilderId(id);
+    const b = db.builders.find((x) => x.id === id);
+    if (b?.defaultLenderId && lenders.some((l) => l.id === b.defaultLenderId)) {
+      setLenderId(b.defaultLenderId);
+    }
+  }
+
+  async function setBuilderDefaultLender(defaultLenderId: string | undefined) {
+    if (!builder) return;
+    await mutate("builders", (arr) =>
+      arr.map((b) => {
+        if (b.id !== builder.id) return b;
+        const next: Builder = { ...b };
+        if (defaultLenderId) next.defaultLenderId = defaultLenderId;
+        else delete next.defaultLenderId;
+        return next;
+      })
+    );
+    showToast(
+      defaultLenderId
+        ? `${lenders.find((l) => l.id === defaultLenderId)?.name || "Lender"} will pre-fill for ${builder.name}`
+        : `${builder.name} no longer pre-fills a lender`
+    );
+  }
+
+  async function setLenderOnDark(onDark: boolean) {
+    if (!lender) return;
+    await mutate("lenders", (arr) => arr.map((l) => (l.id === lender.id ? { ...l, logoOnDark: onDark } : l)));
+  }
 
   function pickCommunity(id: string) {
     setCommunityId(id);
@@ -210,6 +248,7 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
 
   const sharedCanvasProps = {
     builder,
+    lender,
     communityLine: communityLine || "Community Name · City, Province",
     heroPhoto,
     scenarios: scenarios.filter((s) => s.downPaymentPercent > 0 && s.rate > 0),
@@ -253,7 +292,7 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
         <div style={{ marginTop: 14 }}>
           <FieldLabel>Builder</FieldLabel>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <select value={builderId} onChange={(e) => setBuilderId(e.target.value)} style={selectStyle}>
+            <select value={builderId} onChange={(e) => pickBuilder(e.target.value)} style={selectStyle}>
               <option value="">Select a builder…</option>
               {db.builders.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -262,6 +301,52 @@ export default function FeatureSheet({ db, mutate }: { db: TrackerDB; mutate: Mu
             </button>
           </div>
           {showAddBuilder && <AddBuilderForm mutate={mutate} onDone={(id) => { setBuilderId(id); setShowAddBuilder(false); }} />}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <FieldLabel>Lender logo (footer)</FieldLabel>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <select value={lenderId} onChange={(e) => setLenderId(e.target.value)} style={selectStyle}>
+              <option value="">No lender logo</option>
+              {lenders.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+            <button type="button" className="btn secondary small" onClick={() => setShowAddLender((v) => !v)}>
+              {showAddLender ? "Cancel" : "+ New"}
+            </button>
+          </div>
+          {showAddLender && (
+            <AddLenderForm
+              mutate={mutate}
+              builder={builder}
+              onDone={async (id, makeDefault) => {
+                setLenderId(id);
+                setShowAddLender(false);
+                if (makeDefault) await setBuilderDefaultLender(id);
+              }}
+            />
+          )}
+          {lender && (
+            <div style={{ marginTop: 10, padding: 10, background: PALETTE.confidence, borderRadius: 4, display: "flex", justifyContent: "flex-end" }}>
+              <LenderLogo lender={lender} height={36} />
+            </div>
+          )}
+          {lender && (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: PALETTE.confidence, marginTop: 8 }}>
+              <input type="checkbox" checked={!!lender.logoOnDark} onChange={(e) => setLenderOnDark(e.target.checked)} />
+              White / knockout logo — show it without the white plate
+            </label>
+          )}
+          {builder && lender && builder.defaultLenderId !== lender.id && (
+            <button type="button" className="x-link" style={{ marginTop: 8, display: "block" }} onClick={() => setBuilderDefaultLender(lender.id)}>
+              Always pre-fill {lender.name} for {builder.name}
+            </button>
+          )}
+          {builder && lender && builder.defaultLenderId === lender.id && (
+            <div style={{ marginTop: 8, fontSize: 11.5, color: PALETTE.grey4 }}>
+              Pre-fills automatically for {builder.name}.{" "}
+              <button type="button" className="x-link" onClick={() => setBuilderDefaultLender(undefined)}>Stop pre-filling</button>
+            </div>
+          )}
         </div>
 
         <div style={{ marginTop: 14 }}>
@@ -555,15 +640,103 @@ function AddBuilderForm({ mutate, onDone }: { mutate: Mutate; onDone: (id: strin
   );
 }
 
+function AddLenderForm({
+  mutate, builder, onDone,
+}: {
+  mutate: Mutate;
+  builder: Builder | undefined;
+  onDone: (id: string, makeDefault: boolean) => void | Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [logo, setLogo] = useState("");
+  const [onDark, setOnDark] = useState(false);
+  const [makeDefault, setMakeDefault] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  async function onLogo(file: File) {
+    try {
+      // A little larger than builder logos: lender wordmarks are usually wide
+      // and thin, and this one prints in the footer.
+      const dataUrl = await fileToDataUrl(file, 600);
+      setLogo(dataUrl);
+    } catch {
+      showToast("Couldn't load that logo");
+    }
+  }
+
+  async function save() {
+    if (!name.trim() || !logo) {
+      showToast("A lender name and logo are both required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const newLender: Lender = { id: uid(), name: name.trim(), logo, ...(onDark ? { logoOnDark: true } : {}) };
+      await mutate("lenders", (arr) => [...(arr || []), newLender]);
+      await onDone(newLender.id, !!builder && makeDefault);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 10, padding: 12, border: `1px solid ${PALETTE.grey1}`, borderRadius: 4 }}>
+      <TextField label="Lender name" value={name} onChange={setName} placeholder="e.g. First National" />
+      <div style={{ marginTop: 10 }}>
+        <FieldLabel>Logo</FieldLabel>
+        <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogo(f); }} style={{ marginTop: 6 }} />
+        <div style={{ fontSize: 11, color: PALETTE.grey4, marginTop: 4 }}>PNG with a transparent background looks best.</div>
+      </div>
+      {logo && (
+        <div style={{ marginTop: 8, padding: 10, background: PALETTE.confidence, borderRadius: 4, display: "flex", justifyContent: "flex-end" }}>
+          <LenderLogo lender={{ id: "preview", name: name || "Lender", logo, logoOnDark: onDark }} height={36} />
+        </div>
+      )}
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: PALETTE.confidence, marginTop: 10 }}>
+        <input type="checkbox" checked={onDark} onChange={(e) => setOnDark(e.target.checked)} />
+        White / knockout logo — show it without the white plate
+      </label>
+      {builder && (
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: PALETTE.confidence, marginTop: 6 }}>
+          <input type="checkbox" checked={makeDefault} onChange={(e) => setMakeDefault(e.target.checked)} />
+          Pre-fill this lender whenever {builder.name} is picked
+        </label>
+      )}
+      <button type="button" className="btn small" style={{ marginTop: 10 }} disabled={saving} onClick={save}>
+        {saving ? "Saving…" : "Save lender"}
+      </button>
+    </div>
+  );
+}
+
+// Lender logo as it appears in the dark footer. Full-colour logos (the
+// usual case) sit on a white plate so they stay legible and on-brand; a
+// white/knockout logo goes straight onto the footer. `height` is the
+// footer's logo height — the plate is a touch taller so the logo inside
+// reads at roughly the same visual weight as the Spire mark beside it.
+function LenderLogo({ lender, height }: { lender: Lender; height: number }) {
+  const maxWidth = Math.round(height * 7);
+  if (lender.logoOnDark) {
+    return <img src={lender.logo} alt={lender.name} style={{ height, width: "auto", maxWidth, objectFit: "contain", display: "block" }} />;
+  }
+  const pad = Math.round(height * 0.22);
+  return (
+    <div style={{ background: "#fff", borderRadius: 4, padding: `${pad}px ${Math.round(pad * 1.6)}px`, display: "inline-flex", alignItems: "center" }}>
+      <img src={lender.logo} alt={lender.name} style={{ height, width: "auto", maxWidth, objectFit: "contain", display: "block" }} />
+    </div>
+  );
+}
+
 // --- the print canvas: one page per price point -----------------------------
 
 function FeatureSheetCanvas({
-  unit, builder, communityLine, heroPhoto, scenarios: rateScenarios, broker,
+  unit, builder, lender, communityLine, heroPhoto, scenarios: rateScenarios, broker,
   areaManagerName, areaManagerPhone, areaManagerEmail, builderWebsite,
   rateHoldMonths, rateHoldIntro, bullets, estimatedCompletion,
 }: {
   unit: FeatureUnit;
   builder: Builder | undefined;
+  lender: Lender | undefined;
   communityLine: string;
   heroPhoto: string;
   scenarios: RateScenario[];
@@ -676,7 +849,12 @@ function FeatureSheetCanvas({
 
       {/* 4. Footer */}
       <div style={{ background: PALETTE.confidence, color: "#fff", padding: `${footerPad}px 64px`, flexShrink: 0 }}>
-        <img src="/insta-review/assets/logo-spire-stacked-white.png" alt="Spire Mortgage" style={{ height: footerLogoHeight }} />
+        {/* Logo row: Spire Mortgage Team mark on the left, lender partner on the
+            right — sitting directly above the builder contact block below it. */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <img src="/insta-review/assets/logo-spire-stacked-white.png" alt="Spire Mortgage Team" style={{ height: footerLogoHeight }} />
+          {lender && <LenderLogo lender={lender} height={Math.round(footerLogoHeight * 0.7)} />}
+        </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18 }}>
           <div>
             <div style={{ fontSize: 10, letterSpacing: "0.14em", color: PALETTE.warmth, textTransform: "uppercase" }}>Mortgage</div>

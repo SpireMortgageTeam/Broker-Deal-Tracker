@@ -36,6 +36,7 @@ export const COLLECTIONS: Record<CollectionKey, CollectionCfg> = {
   callLogs: { kind: "hash", redisKey: "h:calllogs", legacyKey: "data:calllogs", identity: (l) => l.id },
   // Feature Sheets
   builders: { kind: "hash", redisKey: "h:builders", legacyKey: "data:builders", identity: (b) => b.id },
+  lenders: { kind: "hash", redisKey: "h:lenders", legacyKey: "data:lenders", identity: (l) => l.id },
 };
 
 export const COLLECTION_KEYS = Object.keys(COLLECTIONS) as CollectionKey[];
